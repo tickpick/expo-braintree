@@ -1,39 +1,37 @@
 import ExpoModulesCore
-import BraintreeCore
-import BraintreeCard
-import BraintreeApplePay
-import BraintreePayPal
-import BraintreeVenmo
+import Braintree
 import PassKit
 
 public class ExpoBraintreeModule: Module {
-  private var apiClient: BTAPIClient?
+  private var authorization: String?
 
   public func definition() -> ModuleDefinition {
     Name("ExpoBraintree")
 
     // MARK: - Initialization
 
-    AsyncFunction("initialize") { (authorization: String) in
-      guard let client = BTAPIClient(authorization: authorization) else {
+    AsyncFunction("initialize") { (auth: String) in
+      // Validate by creating a client
+      guard BTAPIClient(authorization: auth) != nil else {
         throw BraintreeError.initializationFailed
       }
-      self.apiClient = client
+      self.authorization = auth
     }
 
     // MARK: - Card Tokenization
 
     AsyncFunction("tokenizeCard") { (cardData: CardData) -> [String: Any?] in
-      let client = try self.requireClient()
-      let cardClient = BTCardClient(apiClient: client)
+      let auth = try self.requireAuthorization()
+      let cardClient = BTCardClient(authorization: auth)
 
-      let card = BTCard()
-      card.number = cardData.number
-      card.expirationMonth = cardData.expirationMonth
-      card.expirationYear = cardData.expirationYear
-      card.cvv = cardData.cvv
-      card.postalCode = cardData.postalCode
-      card.cardholderName = cardData.cardholderName
+      let card = BTCard(
+        number: cardData.number,
+        expirationMonth: cardData.expirationMonth,
+        expirationYear: cardData.expirationYear,
+        cvv: cardData.cvv ?? "",
+        postalCode: cardData.postalCode,
+        cardholderName: cardData.cardholderName
+      )
 
       let nonce = try await cardClient.tokenize(card)
 
@@ -57,8 +55,8 @@ public class ExpoBraintreeModule: Module {
     }
 
     AsyncFunction("tokenizeApplePay") { (request: ApplePayRequestData, promise: Promise) in
-      let client = try self.requireClient()
-      let applePayClient = BTApplePayClient(apiClient: client)
+      let auth = try self.requireAuthorization()
+      let applePayClient = BTApplePayClient(authorization: auth)
 
       let paymentRequest = try await applePayClient.makePaymentRequest()
       paymentRequest.merchantIdentifier = request.merchantIdentifier
@@ -102,18 +100,22 @@ public class ExpoBraintreeModule: Module {
     // MARK: - PayPal Checkout
 
     AsyncFunction("tokenizePayPalCheckout") { (request: PayPalCheckoutRequestData) -> [String: Any?] in
-      let client = try self.requireClient()
-      let paypalClient = BTPayPalClient(apiClient: client)
+      let auth = try self.requireAuthorization()
+      let paypalClient = BTPayPalClient(authorization: auth)
 
-      let checkoutRequest = BTPayPalCheckoutRequest(amount: request.amount)
-      checkoutRequest.currencyCode = request.currencyCode ?? "USD"
-      if let intent = request.intent {
-        switch intent {
-        case "sale": checkoutRequest.intent = .sale
-        case "order": checkoutRequest.intent = .order
-        default: checkoutRequest.intent = .authorize
-        }
+      let intent: BTPayPalRequestIntent
+      switch request.intent {
+      case "sale": intent = .sale
+      case "order": intent = .order
+      default: intent = .authorize
       }
+
+      let checkoutRequest = BTPayPalCheckoutRequest(
+        amount: request.amount,
+        intent: intent,
+        currencyCode: request.currencyCode,
+        displayName: request.displayName
+      )
 
       let nonce = try await paypalClient.tokenize(checkoutRequest)
       return Self.serializePayPalNonce(nonce)
@@ -122,12 +124,13 @@ public class ExpoBraintreeModule: Module {
     // MARK: - PayPal Vault
 
     AsyncFunction("tokenizePayPalVault") { (request: PayPalVaultRequestData) -> [String: Any?] in
-      let client = try self.requireClient()
-      let paypalClient = BTPayPalClient(apiClient: client)
+      let auth = try self.requireAuthorization()
+      let paypalClient = BTPayPalClient(authorization: auth)
 
-      let vaultRequest = BTPayPalVaultRequest()
-      vaultRequest.billingAgreementDescription = request.billingAgreementDescription
-      vaultRequest.userAuthenticationEmail = request.userAuthenticationEmail
+      let vaultRequest = BTPayPalVaultRequest(
+        billingAgreementDescription: request.billingAgreementDescription,
+        displayName: request.displayName
+      )
 
       let nonce = try await paypalClient.tokenize(vaultRequest)
       return Self.serializePayPalNonce(nonce)
@@ -136,15 +139,23 @@ public class ExpoBraintreeModule: Module {
     // MARK: - Venmo
 
     AsyncFunction("tokenizeVenmo") { (request: VenmoRequestData) -> [String: Any?] in
-      let client = try self.requireClient()
-      let venmoClient = BTVenmoClient(apiClient: client)
+      let auth = try self.requireAuthorization()
+
+      // Build universal link for Venmo app switch return
+      let bundleId = Bundle.main.bundleIdentifier ?? "com.tickpick.tickpickapp"
+      guard let universalLink = URL(string: "https://\(bundleId).payments") else {
+        throw BraintreeError.initializationFailed
+      }
+
+      let venmoClient = BTVenmoClient(authorization: auth, universalLink: universalLink)
 
       let venmoRequest = BTVenmoRequest(
-        paymentMethodUsage: request.paymentMethodUsage == "multiUse" ? .multiUse : .singleUse
+        paymentMethodUsage: request.paymentMethodUsage == "multiUse" ? .multiUse : .singleUse,
+        profileID: request.profileId,
+        displayName: request.displayName,
+        collectCustomerBillingAddress: request.collectCustomerBillingAddress ?? false,
+        collectCustomerShippingAddress: request.collectCustomerShippingAddress ?? false
       )
-      venmoRequest.profileID = request.profileId
-      venmoRequest.collectCustomerBillingAddress = request.collectCustomerBillingAddress ?? false
-      venmoRequest.collectCustomerShippingAddress = request.collectCustomerShippingAddress ?? false
 
       let nonce = try await venmoClient.tokenize(venmoRequest)
 
@@ -160,11 +171,11 @@ public class ExpoBraintreeModule: Module {
 
   // MARK: - Helpers
 
-  private func requireClient() throws -> BTAPIClient {
-    guard let client = apiClient else {
+  private func requireAuthorization() throws -> String {
+    guard let auth = authorization else {
       throw BraintreeError.notInitialized
     }
-    return client
+    return auth
   }
 
   private static func serializePayPalNonce(_ nonce: BTPayPalAccountNonce) -> [String: Any?] {
@@ -176,17 +187,6 @@ public class ExpoBraintreeModule: Module {
       "email": nonce.email,
       "firstName": nonce.firstName,
       "lastName": nonce.lastName,
-      "billingAddress": nonce.billingAddress.map { address in
-        [
-          "recipientName": address.recipientName,
-          "streetAddress": address.streetAddress,
-          "extendedAddress": address.extendedAddress,
-          "locality": address.locality,
-          "region": address.region,
-          "postalCode": address.postalCode,
-          "countryCodeAlpha2": address.countryCodeAlpha2,
-        ] as [String: Any?]
-      },
     ]
   }
 }
@@ -310,16 +310,17 @@ extension BTCardNetwork {
     case .AMEX: return "Amex"
     case .dinersClub: return "DinersClub"
     case .discover: return "Discover"
-    case .maestro: return "Maestro"
     case .masterCard: return "MasterCard"
+    case .visa: return "Visa"
     case .JCB: return "JCB"
     case .laser: return "Laser"
-    case .solo: return "Solo"
-    case .switch_: return "Switch"
+    case .maestro: return "Maestro"
     case .unionPay: return "UnionPay"
     case .hiper: return "Hiper"
     case .hipercard: return "Hipercard"
-    case .visa: return "Visa"
+    case .solo: return "Solo"
+    case .`switch`: return "Switch"
+    case .ukMaestro: return "UKMaestro"
     @unknown default: return "Unknown"
     }
   }
