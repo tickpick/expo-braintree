@@ -72,6 +72,7 @@ export interface PayPalVaultRequest {
 
 export interface VenmoRequest {
   paymentMethodUsage: "singleUse" | "multiUse";
+  universalLink: string;
   profileId?: string;
   displayName?: string;
   collectCustomerBillingAddress?: boolean;

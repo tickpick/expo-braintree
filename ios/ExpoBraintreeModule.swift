@@ -141,10 +141,8 @@ public class ExpoBraintreeModule: Module {
     AsyncFunction("tokenizeVenmo") { (request: VenmoRequestData) -> [String: Any?] in
       let auth = try self.requireAuthorization()
 
-      // Build universal link for Venmo app switch return
-      let bundleId = Bundle.main.bundleIdentifier ?? "com.tickpick.tickpickapp"
-      guard let universalLink = URL(string: "https://\(bundleId).payments") else {
-        throw BraintreeError.initializationFailed
+      guard let universalLink = URL(string: request.universalLink) else {
+        throw BraintreeError.invalidUniversalLink
       }
 
       let venmoClient = BTVenmoClient(authorization: auth, universalLink: universalLink)
@@ -232,6 +230,7 @@ struct PayPalVaultRequestData: Record {
 
 struct VenmoRequestData: Record {
   @Field var paymentMethodUsage: String
+  @Field var universalLink: String
   @Field var profileId: String?
   @Field var displayName: String?
   @Field var collectCustomerBillingAddress: Bool?
@@ -244,6 +243,8 @@ enum BraintreeError: Error, LocalizedError {
   case notInitialized
   case initializationFailed
   case applePayPresentationFailed
+  case applePayCancelled
+  case invalidUniversalLink
 
   var errorDescription: String? {
     switch self {
@@ -253,6 +254,10 @@ enum BraintreeError: Error, LocalizedError {
       return "Failed to initialize Braintree client. Check your authorization token."
     case .applePayPresentationFailed:
       return "Failed to present Apple Pay payment sheet."
+    case .applePayCancelled:
+      return "User cancelled Apple Pay."
+    case .invalidUniversalLink:
+      return "Invalid universal link URL provided for Venmo."
     }
   }
 }
@@ -295,7 +300,7 @@ private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelega
   func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
     controller.dismiss {
       if !self.didAuthorize {
-        self.promise.reject(BraintreeError.applePayPresentationFailed)
+        self.promise.reject(BraintreeError.applePayCancelled)
       }
     }
   }

@@ -125,13 +125,6 @@ class ExpoBraintreeModule : Module() {
         googleMerchantName = request.merchantName
       }
 
-      googlePayClient.requestPayment(activity, googlePayRequest) { error ->
-        if (error != null) {
-          promise.reject(CodedException("GOOGLE_PAY_REQUEST_ERROR", error.message, error))
-        }
-        // Result comes through onActivityResult — handled via listener
-      }
-
       googlePayClient.setListener { result ->
         when (result) {
           is GooglePayResult.Success -> {
@@ -150,6 +143,12 @@ class ExpoBraintreeModule : Module() {
           is GooglePayResult.Cancel -> {
             promise.reject(CodedException("GOOGLE_PAY_CANCELLED", "User cancelled Google Pay", null))
           }
+        }
+      }
+
+      googlePayClient.requestPayment(activity, googlePayRequest) { error ->
+        if (error != null) {
+          promise.reject(CodedException("GOOGLE_PAY_REQUEST_ERROR", error.message, error))
         }
       }
     }
@@ -338,6 +337,7 @@ class PayPalVaultRequestRecord : Record {
 
 class VenmoRequestRecord : Record {
   @Field val paymentMethodUsage: String = "singleUse"
+  @Field val universalLink: String = ""
   @Field val profileId: String? = null
   @Field val displayName: String? = null
   @Field val collectCustomerBillingAddress: Boolean? = false
