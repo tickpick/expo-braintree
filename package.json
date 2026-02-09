@@ -1,0 +1,40 @@
+{
+  "name": "expo-braintree",
+  "version": "0.1.0",
+  "description": "Expo module for Braintree payments — Apple Pay, Google Pay, PayPal, Venmo, and card tokenization",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "lint": "expo-module lint",
+    "test": "expo-module test",
+    "prepare": "expo-module prepare",
+    "prepublishOnly": "expo-module prepublishOnly",
+    "expo-module": "expo-module"
+  },
+  "keywords": [
+    "expo",
+    "react-native",
+    "braintree",
+    "payments",
+    "apple-pay",
+    "google-pay",
+    "paypal",
+    "venmo"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "expo": "^52.0.0",
+    "expo-module-scripts": "^4.0.0",
+    "expo-modules-core": "^2.0.0"
+  },
+  "app": {
+    "plugin": "./plugin/build/withBraintree"
+  }
+}
