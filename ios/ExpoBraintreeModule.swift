@@ -11,8 +11,7 @@ public class ExpoBraintreeModule: Module {
     // MARK: - Initialization
 
     AsyncFunction("initialize") { (auth: String) in
-      // Validate by creating a client
-      guard BTAPIClient(authorization: auth) != nil else {
+      guard !auth.isEmpty else {
         throw BraintreeError.initializationFailed
       }
       self.authorization = auth
@@ -101,7 +100,7 @@ public class ExpoBraintreeModule: Module {
 
     AsyncFunction("tokenizePayPalCheckout") { (request: PayPalCheckoutRequestData) -> [String: Any?] in
       let auth = try self.requireAuthorization()
-      let paypalClient = BTPayPalClient(authorization: auth)
+      let paypalClient = await MainActor.run { BTPayPalClient(authorization: auth) }
 
       let intent: BTPayPalRequestIntent
       switch request.intent {
@@ -125,7 +124,7 @@ public class ExpoBraintreeModule: Module {
 
     AsyncFunction("tokenizePayPalVault") { (request: PayPalVaultRequestData) -> [String: Any?] in
       let auth = try self.requireAuthorization()
-      let paypalClient = BTPayPalClient(authorization: auth)
+      let paypalClient = await MainActor.run { BTPayPalClient(authorization: auth) }
 
       let vaultRequest = BTPayPalVaultRequest(
         billingAgreementDescription: request.billingAgreementDescription,
