@@ -112,6 +112,7 @@ public class ExpoBraintreeModule: Module {
       let checkoutRequest = BTPayPalCheckoutRequest(
         amount: request.amount,
         intent: intent,
+        userAction: request.userAction == "commit" ? .payNow : .none,
         currencyCode: request.currencyCode,
         displayName: request.displayName
       )

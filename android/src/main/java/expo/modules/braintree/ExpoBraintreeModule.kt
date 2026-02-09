@@ -166,6 +166,9 @@ class ExpoBraintreeModule : Module() {
           "order" -> com.braintreepayments.api.PayPalPaymentIntent.ORDER
           else -> com.braintreepayments.api.PayPalPaymentIntent.AUTHORIZE
         }
+        if (request.userAction == "commit") {
+          userAction = com.braintreepayments.api.PayPalPaymentUserAction.PAY_NOW
+        }
       }
 
       payPalClient.setListener { result ->
