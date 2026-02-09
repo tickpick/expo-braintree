@@ -1,6 +1,4 @@
 node_modules/
-build/
-plugin/build/
 .expo/
 *.tsbuildinfo
 .idea
