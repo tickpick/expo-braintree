@@ -5,11 +5,10 @@
   "main": "build/index.js",
   "types": "src/index.ts",
   "scripts": {
-    "build": "expo-module build && tsc -p plugin/tsconfig.json",
+    "build": "expo-module build",
     "clean": "expo-module clean",
     "lint": "expo-module lint",
-    "test": "expo-module test",
-    "prepare": "expo-module build && tsc -p plugin/tsconfig.json"
+    "test": "expo-module test"
   },
   "keywords": [
     "expo",
