@@ -132,10 +132,10 @@ public class ExpoBraintreeModule: Module {
         intent: intent,
         userAction: request.userAction == "commit" ? .payNow : .none,
         currencyCode: request.currencyCode,
-        displayName: request.displayName
+        displayName: request.displayName,
+        isShippingAddressEditable: request.shippingAddressEditable ?? false,
+        isShippingAddressRequired: request.shippingAddressRequired ?? false
       )
-      checkoutRequest.isShippingAddressRequired = request.shippingAddressRequired ?? false
-      checkoutRequest.isShippingAddressEditable = request.shippingAddressEditable ?? false
 
       let nonce = try await paypalClient.tokenize(checkoutRequest)
       return Self.serializePayPalNonce(nonce)
@@ -149,10 +149,10 @@ public class ExpoBraintreeModule: Module {
 
       let vaultRequest = BTPayPalVaultRequest(
         billingAgreementDescription: request.billingAgreementDescription,
-        displayName: request.displayName
+        displayName: request.displayName,
+        isShippingAddressEditable: request.shippingAddressEditable ?? false,
+        isShippingAddressRequired: request.shippingAddressRequired ?? false
       )
-      vaultRequest.isShippingAddressRequired = request.shippingAddressRequired ?? false
-      vaultRequest.isShippingAddressEditable = request.shippingAddressEditable ?? false
 
       let nonce = try await paypalClient.tokenize(vaultRequest)
       return Self.serializePayPalNonce(nonce)
@@ -216,14 +216,15 @@ public class ExpoBraintreeModule: Module {
 
   private static func serializePostalAddress(_ address: BTPostalAddress?) -> [String: Any?]? {
     guard let address = address else { return nil }
+    let components = address.addressComponents()
     return [
-      "recipientName": address.recipientName,
-      "streetAddress": address.streetAddress,
-      "extendedAddress": address.extendedAddress,
-      "locality": address.locality,
-      "region": address.region,
-      "postalCode": address.postalCode,
-      "countryCodeAlpha2": address.countryCodeAlpha2,
+      "recipientName": components["recipientName"],
+      "streetAddress": components["streetAddress"],
+      "extendedAddress": components["extendedAddress"],
+      "locality": components["locality"],
+      "region": components["region"],
+      "postalCode": components["postalCode"],
+      "countryCodeAlpha2": components["countryCodeAlpha2"],
     ]
   }
 }
