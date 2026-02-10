@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import Braintree
+import Contacts
 import PassKit
 
 public class ExpoBraintreeModule: Module {
@@ -70,6 +71,18 @@ public class ExpoBraintreeModule: Module {
         )
       }
 
+      if let shippingFields = request.requiredShippingContactFields {
+        paymentRequest.requiredShippingContactFields = Set(shippingFields.compactMap { field in
+          switch field {
+          case "postalAddress": return .postalAddress
+          case "name": return .name
+          case "emailAddress": return .emailAddress
+          case "phoneNumber": return .phoneNumber
+          default: return nil
+          }
+        })
+      }
+
       if let networks = request.supportedNetworks {
         paymentRequest.supportedNetworks = networks.compactMap { network in
           switch network {
@@ -121,6 +134,8 @@ public class ExpoBraintreeModule: Module {
         currencyCode: request.currencyCode,
         displayName: request.displayName
       )
+      checkoutRequest.isShippingAddressRequired = request.shippingAddressRequired ?? false
+      checkoutRequest.isShippingAddressEditable = request.shippingAddressEditable ?? false
 
       let nonce = try await paypalClient.tokenize(checkoutRequest)
       return Self.serializePayPalNonce(nonce)
@@ -136,6 +151,8 @@ public class ExpoBraintreeModule: Module {
         billingAgreementDescription: request.billingAgreementDescription,
         displayName: request.displayName
       )
+      vaultRequest.isShippingAddressRequired = request.shippingAddressRequired ?? false
+      vaultRequest.isShippingAddressEditable = request.shippingAddressEditable ?? false
 
       let nonce = try await paypalClient.tokenize(vaultRequest)
       return Self.serializePayPalNonce(nonce)
@@ -168,6 +185,8 @@ public class ExpoBraintreeModule: Module {
         "isDefault": nonce.isDefault,
         "description": nonce.description,
         "username": nonce.username,
+        "billingAddress": Self.serializePostalAddress(nonce.billingAddress),
+        "shippingAddress": Self.serializePostalAddress(nonce.shippingAddress),
       ]
     }
   }
@@ -190,6 +209,21 @@ public class ExpoBraintreeModule: Module {
       "email": nonce.email,
       "firstName": nonce.firstName,
       "lastName": nonce.lastName,
+      "billingAddress": serializePostalAddress(nonce.billingAddress),
+      "shippingAddress": serializePostalAddress(nonce.shippingAddress),
+    ]
+  }
+
+  private static func serializePostalAddress(_ address: BTPostalAddress?) -> [String: Any?]? {
+    guard let address = address else { return nil }
+    return [
+      "recipientName": address.recipientName,
+      "streetAddress": address.streetAddress,
+      "extendedAddress": address.extendedAddress,
+      "locality": address.locality,
+      "region": address.region,
+      "postalCode": address.postalCode,
+      "countryCodeAlpha2": address.countryCodeAlpha2,
     ]
   }
 }
@@ -217,6 +251,7 @@ struct ApplePayRequestData: Record {
   @Field var currencyCode: String
   @Field var paymentSummaryItems: [ApplePaySummaryItemData]
   @Field var supportedNetworks: [String]?
+  @Field var requiredShippingContactFields: [String]?
 }
 
 struct PayPalCheckoutRequestData: Record {
@@ -225,12 +260,16 @@ struct PayPalCheckoutRequestData: Record {
   @Field var intent: String?
   @Field var userAction: String?
   @Field var displayName: String?
+  @Field var shippingAddressRequired: Bool?
+  @Field var shippingAddressEditable: Bool?
 }
 
 struct PayPalVaultRequestData: Record {
   @Field var billingAgreementDescription: String?
   @Field var displayName: String?
   @Field var userAuthenticationEmail: String?
+  @Field var shippingAddressRequired: Bool?
+  @Field var shippingAddressEditable: Bool?
 }
 
 struct VenmoRequestData: Record {
@@ -289,12 +328,31 @@ private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelega
       do {
         let nonce = try await applePayClient.tokenize(payment)
         completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
-        continuation?.resume(returning: [
+
+        var result: [String: Any?] = [
           "nonce": nonce.nonce,
           "type": "applePay",
           "isDefault": nonce.isDefault,
           "description": nonce.description,
-        ])
+        ]
+
+        if let contact = payment.shippingContact {
+          if let postalAddress = contact.postalAddress {
+            result["shippingAddress"] = [
+              "recipientName": contact.name.map { PersonNameComponentsFormatter().string(from: $0) },
+              "streetAddress": postalAddress.street,
+              "extendedAddress": postalAddress.subLocality.isEmpty ? nil : postalAddress.subLocality,
+              "locality": postalAddress.city,
+              "region": postalAddress.state,
+              "postalCode": postalAddress.postalCode,
+              "countryCodeAlpha2": postalAddress.isoCountryCode,
+            ] as [String: Any?]
+          }
+          result["email"] = contact.emailAddress
+          result["phoneNumber"] = contact.phoneNumber?.stringValue
+        }
+
+        continuation?.resume(returning: result)
         continuation = nil
       } catch {
         completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))

@@ -15,6 +15,7 @@ import com.braintreepayments.api.CardNonce
 import com.braintreepayments.api.CardResult
 import com.braintreepayments.api.GooglePayClient
 import com.braintreepayments.api.GooglePayRequest
+import com.braintreepayments.api.GooglePayCardNonce
 import com.braintreepayments.api.GooglePayResult
 import com.braintreepayments.api.PayPalClient
 import com.braintreepayments.api.PayPalCheckoutRequest
@@ -26,6 +27,7 @@ import com.braintreepayments.api.VenmoRequest
 import com.braintreepayments.api.VenmoPaymentMethodUsage
 import com.braintreepayments.api.VenmoAccountNonce
 import com.braintreepayments.api.VenmoResult
+import com.braintreepayments.api.PostalAddress
 import com.google.android.gms.wallet.TransactionInfo
 import com.google.android.gms.wallet.WalletConstants
 
@@ -129,12 +131,15 @@ class ExpoBraintreeModule : Module() {
         when (result) {
           is GooglePayResult.Success -> {
             val nonce = result.nonce
+            val gpNonce = nonce as? GooglePayCardNonce
             promise.resolve(mapOf(
               "nonce" to nonce.string,
               "type" to "googlePay",
               "isDefault" to nonce.isDefault,
               "description" to nonce.string,
-              "email" to nonce.email,
+              "email" to gpNonce?.email,
+              "billingAddress" to gpNonce?.billingAddress?.let { serializePostalAddress(it) },
+              "shippingAddress" to gpNonce?.shippingAddress?.let { serializePostalAddress(it) },
             ))
           }
           is GooglePayResult.Failure -> {
@@ -169,6 +174,8 @@ class ExpoBraintreeModule : Module() {
         if (request.userAction == "commit") {
           userAction = com.braintreepayments.api.PayPalPaymentUserAction.PAY_NOW
         }
+        isShippingAddressRequired = request.shippingAddressRequired ?: false
+        isShippingAddressEditable = request.shippingAddressEditable ?: false
       }
 
       payPalClient.setListener { result ->
@@ -201,6 +208,8 @@ class ExpoBraintreeModule : Module() {
       val vaultRequest = PayPalVaultRequest().apply {
         billingAgreementDescription = request.billingAgreementDescription
         userAuthenticationEmail = request.userAuthenticationEmail
+        isShippingAddressRequired = request.shippingAddressRequired ?: false
+        isShippingAddressEditable = request.shippingAddressEditable ?: false
       }
 
       payPalClient.setListener { result ->
@@ -251,6 +260,8 @@ class ExpoBraintreeModule : Module() {
               "isDefault" to nonce.isDefault,
               "description" to nonce.string,
               "username" to nonce.username,
+              "billingAddress" to serializePostalAddress(nonce.billingAddress),
+              "shippingAddress" to serializePostalAddress(nonce.shippingAddress),
             ))
           }
           is VenmoResult.Failure -> {
@@ -285,17 +296,21 @@ class ExpoBraintreeModule : Module() {
       "email" to nonce.email,
       "firstName" to nonce.firstName,
       "lastName" to nonce.lastName,
-      "billingAddress" to nonce.billingAddress?.let { address ->
-        mapOf(
-          "recipientName" to address.recipientName,
-          "streetAddress" to address.streetAddress,
-          "extendedAddress" to address.extendedAddress,
-          "locality" to address.locality,
-          "region" to address.region,
-          "postalCode" to address.postalCode,
-          "countryCodeAlpha2" to address.countryCodeAlpha2,
-        )
-      },
+      "billingAddress" to serializePostalAddress(nonce.billingAddress),
+      "shippingAddress" to serializePostalAddress(nonce.shippingAddress),
+    )
+  }
+
+  private fun serializePostalAddress(address: PostalAddress?): Map<String, Any?>? {
+    if (address == null) return null
+    return mapOf(
+      "recipientName" to address.recipientName,
+      "streetAddress" to address.streetAddress,
+      "extendedAddress" to address.extendedAddress,
+      "locality" to address.locality,
+      "region" to address.region,
+      "postalCode" to address.postalCode,
+      "countryCodeAlpha2" to address.countryCodeAlpha2,
     )
   }
 }
@@ -330,12 +345,16 @@ class PayPalCheckoutRequestRecord : Record {
   @Field val intent: String? = "authorize"
   @Field val userAction: String? = null
   @Field val displayName: String? = null
+  @Field val shippingAddressRequired: Boolean? = false
+  @Field val shippingAddressEditable: Boolean? = false
 }
 
 class PayPalVaultRequestRecord : Record {
   @Field val billingAgreementDescription: String? = null
   @Field val displayName: String? = null
   @Field val userAuthenticationEmail: String? = null
+  @Field val shippingAddressRequired: Boolean? = false
+  @Field val shippingAddressEditable: Boolean? = false
 }
 
 class VenmoRequestRecord : Record {

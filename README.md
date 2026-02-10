@@ -62,7 +62,9 @@ if (await isApplePaySupported()) {
     countryCode: "US",
     currencyCode: "USD",
     paymentSummaryItems: [{ label: "Total", amount: "9.99" }],
+    requiredShippingContactFields: ["postalAddress", "name", "emailAddress"],
   });
+  // applePayNonce.shippingAddress, applePayNonce.email
 }
 
 // Google Pay (Android)
@@ -71,7 +73,9 @@ if (await isGooglePayReady()) {
     countryCode: "US",
     currencyCode: "USD",
     totalPrice: "9.99",
+    shippingAddressRequired: true,
   });
+  // googlePayNonce.shippingAddress
 }
 
 // PayPal Checkout
@@ -79,7 +83,10 @@ const paypalNonce = await tokenizePayPalCheckout({
   amount: "9.99",
   currencyCode: "USD",
   userAction: "commit", // shows "Complete Purchase" instead of "Review Order"
+  shippingAddressRequired: true,
+  shippingAddressEditable: true,
 });
+// paypalNonce.shippingAddress
 
 // PayPal Vault
 const paypalVaultNonce = await tokenizePayPalVault({
@@ -90,7 +97,9 @@ const paypalVaultNonce = await tokenizePayPalVault({
 const venmoNonce = await tokenizeVenmo({
   paymentMethodUsage: "multiUse",
   universalLink: "https://your-app.com/braintree-venmo",
+  collectCustomerShippingAddress: true,
 });
+// venmoNonce.shippingAddress
 ```
 
 ## Native SDK Versions

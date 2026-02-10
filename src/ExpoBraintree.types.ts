@@ -15,12 +15,19 @@ export interface CardData {
 
 // ── Apple Pay (iOS) ─────────────────────────────────────────────────────────
 
+export type ApplePayContactField =
+  | "postalAddress"
+  | "name"
+  | "emailAddress"
+  | "phoneNumber";
+
 export interface ApplePayRequest {
   merchantIdentifier: string;
   countryCode: string;
   currencyCode: string;
   paymentSummaryItems: ApplePaySummaryItem[];
   supportedNetworks?: ApplePayNetwork[];
+  requiredShippingContactFields?: ApplePayContactField[];
 }
 
 export interface ApplePaySummaryItem {
@@ -60,12 +67,16 @@ export interface PayPalCheckoutRequest {
   intent?: "authorize" | "sale" | "order";
   userAction?: "default" | "commit";
   displayName?: string;
+  shippingAddressRequired?: boolean;
+  shippingAddressEditable?: boolean;
 }
 
 export interface PayPalVaultRequest {
   billingAgreementDescription?: string;
   displayName?: string;
   userAuthenticationEmail?: string;
+  shippingAddressRequired?: boolean;
+  shippingAddressEditable?: boolean;
 }
 
 // ── Venmo ───────────────────────────────────────────────────────────────────
@@ -99,6 +110,9 @@ export interface CardNonce extends PaymentMethodNonce {
 
 export interface ApplePayNonce extends PaymentMethodNonce {
   type: "applePay";
+  shippingAddress?: Address;
+  email?: string;
+  phoneNumber?: string;
 }
 
 export interface GooglePayNonce extends PaymentMethodNonce {
@@ -116,11 +130,14 @@ export interface PayPalNonce extends PaymentMethodNonce {
   firstName?: string;
   lastName?: string;
   billingAddress?: Address;
+  shippingAddress?: Address;
 }
 
 export interface VenmoNonce extends PaymentMethodNonce {
   type: "venmo";
   username?: string;
+  billingAddress?: Address;
+  shippingAddress?: Address;
 }
 
 export interface Address {
