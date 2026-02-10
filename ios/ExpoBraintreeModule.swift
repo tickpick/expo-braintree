@@ -61,6 +61,7 @@ public class ExpoBraintreeModule: Module {
       paymentRequest.merchantIdentifier = request.merchantIdentifier
       paymentRequest.countryCode = request.countryCode
       paymentRequest.currencyCode = request.currencyCode
+      paymentRequest.merchantCapabilities = .capability3DS
       paymentRequest.paymentSummaryItems = request.paymentSummaryItems.map { item in
         PKPaymentSummaryItem(
           label: item.label,
