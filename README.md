@@ -51,7 +51,7 @@ await initialize("<CLIENT_TOKEN>");
 const cardNonce = await tokenizeCard({
   number: "4111111111111111",
   expirationMonth: "12",
-  expirationYear: "2025",
+  expirationYear: "2028",
   cvv: "123",
 });
 
@@ -78,6 +78,7 @@ if (await isGooglePayReady()) {
 const paypalNonce = await tokenizePayPalCheckout({
   amount: "9.99",
   currencyCode: "USD",
+  userAction: "commit", // shows "Complete Purchase" instead of "Review Order"
 });
 
 // PayPal Vault
@@ -88,6 +89,7 @@ const paypalVaultNonce = await tokenizePayPalVault({
 // Venmo
 const venmoNonce = await tokenizeVenmo({
   paymentMethodUsage: "multiUse",
+  universalLink: "https://your-app.com/braintree-venmo",
 });
 ```
 
