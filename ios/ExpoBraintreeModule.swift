@@ -53,7 +53,7 @@ public class ExpoBraintreeModule: Module {
       return PKPaymentAuthorizationController.canMakePayments()
     }
 
-    AsyncFunction("tokenizeApplePay") { (request: ApplePayRequestData, promise: Promise) in
+    AsyncFunction("tokenizeApplePay") { (request: ApplePayRequestData) -> [String: Any?] in
       let auth = try self.requireAuthorization()
       let applePayClient = BTApplePayClient(authorization: auth)
 
@@ -83,16 +83,20 @@ public class ExpoBraintreeModule: Module {
         }
       }
 
-      let controller = PKPaymentAuthorizationController(paymentRequest: paymentRequest)
-      let delegate = ApplePayDelegate(applePayClient: applePayClient, promise: promise)
+      return try await withCheckedThrowingContinuation { continuation in
+        let controller = PKPaymentAuthorizationController(paymentRequest: paymentRequest)
+        let delegate = ApplePayDelegate(applePayClient: applePayClient, continuation: continuation)
 
-      // Prevent delegate from being deallocated
-      objc_setAssociatedObject(controller, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        // Prevent delegate from being deallocated
+        objc_setAssociatedObject(controller, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
-      controller.delegate = delegate
-      let presented = await controller.present()
-      if !presented {
-        promise.reject(BraintreeError.applePayPresentationFailed)
+        controller.delegate = delegate
+        Task {
+          let presented = await controller.present()
+          if !presented {
+            continuation.resume(throwing: BraintreeError.applePayPresentationFailed)
+          }
+        }
       }
     }
 
@@ -266,12 +270,12 @@ enum BraintreeError: Error, LocalizedError {
 
 private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelegate {
   private let applePayClient: BTApplePayClient
-  private let promise: Promise
+  private var continuation: CheckedContinuation<[String: Any?], Error>?
   private var didAuthorize = false
 
-  init(applePayClient: BTApplePayClient, promise: Promise) {
+  init(applePayClient: BTApplePayClient, continuation: CheckedContinuation<[String: Any?], Error>) {
     self.applePayClient = applePayClient
-    self.promise = promise
+    self.continuation = continuation
   }
 
   func paymentAuthorizationController(
@@ -284,15 +288,17 @@ private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelega
       do {
         let nonce = try await applePayClient.tokenize(payment)
         completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
-        promise.resolve([
+        continuation?.resume(returning: [
           "nonce": nonce.nonce,
           "type": "applePay",
           "isDefault": nonce.isDefault,
           "description": nonce.description,
-        ] as [String: Any?])
+        ])
+        continuation = nil
       } catch {
         completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
-        promise.reject(error)
+        continuation?.resume(throwing: error)
+        continuation = nil
       }
     }
   }
@@ -300,7 +306,8 @@ private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelega
   func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
     controller.dismiss {
       if !self.didAuthorize {
-        self.promise.reject(BraintreeError.applePayCancelled)
+        self.continuation?.resume(throwing: BraintreeError.applePayCancelled)
+        self.continuation = nil
       }
     }
   }
