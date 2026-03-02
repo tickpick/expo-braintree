@@ -1,5 +1,5 @@
 {
-  "name": "expo-braintree",
+  "name": "@tickpick/expo-braintree",
   "version": "0.1.0",
   "description": "Expo module for Braintree payments — Apple Pay, Google Pay, PayPal, Venmo, and card tokenization",
   "main": "build/index.js",
