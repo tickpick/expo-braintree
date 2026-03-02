@@ -4,11 +4,32 @@
   "description": "Expo module for Braintree payments — Apple Pay, Google Pay, PayPal, Venmo, and card tokenization",
   "main": "build/index.js",
   "types": "src/index.ts",
+  "files": [
+    "build",
+    "src",
+    "ios",
+    "android",
+    "plugin",
+    "app.plugin.js",
+    "expo-module.config.json",
+    "ExpoBraintree.podspec",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tickpick/expo-braintree.git"
+  },
+  "homepage": "https://github.com/tickpick/expo-braintree#readme",
+  "bugs": {
+    "url": "https://github.com/tickpick/expo-braintree/issues"
+  },
+  "author": "TickPick",
   "scripts": {
     "build": "expo-module build",
     "clean": "expo-module clean",
     "lint": "expo-module lint",
-    "test": "expo-module test"
+    "test": "expo-module test",
+    "prepublishOnly": "tsc --skipLibCheck"
   },
   "keywords": [
     "expo",

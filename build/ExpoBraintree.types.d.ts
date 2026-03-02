@@ -1,0 +1,111 @@
+export type Authorization = string;
+export interface CardData {
+    number: string;
+    expirationMonth: string;
+    expirationYear: string;
+    cvv?: string;
+    postalCode?: string;
+    cardholderName?: string;
+}
+export type ApplePayContactField = "postalAddress" | "name" | "emailAddress" | "phoneNumber";
+export interface ApplePayRequest {
+    merchantIdentifier: string;
+    countryCode: string;
+    currencyCode: string;
+    paymentSummaryItems: ApplePaySummaryItem[];
+    supportedNetworks?: ApplePayNetwork[];
+    requiredShippingContactFields?: ApplePayContactField[];
+}
+export interface ApplePaySummaryItem {
+    label: string;
+    amount: string;
+    type?: "final" | "pending";
+}
+export type ApplePayNetwork = "visa" | "masterCard" | "amex" | "discover" | "maestro" | "jcb";
+export interface GooglePayRequest {
+    merchantName?: string;
+    countryCode: string;
+    currencyCode: string;
+    totalPrice: string;
+    totalPriceStatus?: "FINAL" | "ESTIMATED" | "NOT_CURRENTLY_KNOWN";
+    allowPrepaidCards?: boolean;
+    billingAddressRequired?: boolean;
+    emailRequired?: boolean;
+    shippingAddressRequired?: boolean;
+    googleMerchantId?: string;
+}
+export interface PayPalCheckoutRequest {
+    amount: string;
+    currencyCode?: string;
+    intent?: "authorize" | "sale" | "order";
+    userAction?: "default" | "commit";
+    displayName?: string;
+    shippingAddressRequired?: boolean;
+    shippingAddressEditable?: boolean;
+}
+export interface PayPalVaultRequest {
+    billingAgreementDescription?: string;
+    displayName?: string;
+    userAuthenticationEmail?: string;
+    shippingAddressRequired?: boolean;
+    shippingAddressEditable?: boolean;
+}
+export interface VenmoRequest {
+    paymentMethodUsage: "singleUse" | "multiUse";
+    universalLink: string;
+    profileId?: string;
+    displayName?: string;
+    collectCustomerBillingAddress?: boolean;
+    collectCustomerShippingAddress?: boolean;
+}
+export interface PaymentMethodNonce {
+    nonce: string;
+    type: "card" | "applePay" | "googlePay" | "paypal" | "venmo";
+    isDefault: boolean;
+    description?: string;
+}
+export interface CardNonce extends PaymentMethodNonce {
+    type: "card";
+    cardNetwork?: string;
+    lastFour?: string;
+    expirationMonth?: string;
+    expirationYear?: string;
+    bin?: string;
+}
+export interface ApplePayNonce extends PaymentMethodNonce {
+    type: "applePay";
+    shippingAddress?: Address;
+    email?: string;
+    phoneNumber?: string;
+}
+export interface GooglePayNonce extends PaymentMethodNonce {
+    type: "googlePay";
+    cardNetwork?: string;
+    lastFour?: string;
+    email?: string;
+    billingAddress?: Address;
+    shippingAddress?: Address;
+}
+export interface PayPalNonce extends PaymentMethodNonce {
+    type: "paypal";
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    billingAddress?: Address;
+    shippingAddress?: Address;
+}
+export interface VenmoNonce extends PaymentMethodNonce {
+    type: "venmo";
+    username?: string;
+    billingAddress?: Address;
+    shippingAddress?: Address;
+}
+export interface Address {
+    recipientName?: string;
+    streetAddress?: string;
+    extendedAddress?: string;
+    locality?: string;
+    region?: string;
+    postalCode?: string;
+    countryCodeAlpha2?: string;
+}

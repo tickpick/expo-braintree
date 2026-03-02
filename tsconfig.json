@@ -1,7 +1,13 @@
 {
-  "extends": "expo-module-scripts/tsconfig.module",
   "compilerOptions": {
-    "outDir": "./build"
+    "declaration": true,
+    "esModuleInterop": true,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "./build",
+    "skipLibCheck": true,
+    "target": "esnext",
+    "jsx": "react-native"
   },
   "include": ["./src"]
 }

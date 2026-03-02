@@ -1,0 +1,11 @@
+import type { CardData, CardNonce, ApplePayRequest, ApplePayNonce, GooglePayRequest, GooglePayNonce, PayPalCheckoutRequest, PayPalVaultRequest, PayPalNonce, VenmoRequest, VenmoNonce } from "./ExpoBraintree.types";
+export * from "./ExpoBraintree.types";
+export declare function initialize(authorization: string): Promise<void>;
+export declare function tokenizeCard(card: CardData): Promise<CardNonce>;
+export declare function isApplePaySupported(): Promise<boolean>;
+export declare function tokenizeApplePay(request: ApplePayRequest): Promise<ApplePayNonce>;
+export declare function isGooglePayReady(request?: Partial<GooglePayRequest>): Promise<boolean>;
+export declare function tokenizeGooglePay(request: GooglePayRequest): Promise<GooglePayNonce>;
+export declare function tokenizePayPalCheckout(request: PayPalCheckoutRequest): Promise<PayPalNonce>;
+export declare function tokenizePayPalVault(request: PayPalVaultRequest): Promise<PayPalNonce>;
+export declare function tokenizeVenmo(request: VenmoRequest): Promise<VenmoNonce>;
