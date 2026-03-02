@@ -42,6 +42,9 @@
     "venmo"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "expo": "*",
     "react": "*",
