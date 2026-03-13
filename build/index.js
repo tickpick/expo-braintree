@@ -18,6 +18,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initialize = initialize;
+exports.setReturnUrl = setReturnUrl;
 exports.tokenizeCard = tokenizeCard;
 exports.isApplePaySupported = isApplePaySupported;
 exports.tokenizeApplePay = tokenizeApplePay;
@@ -32,6 +33,13 @@ __exportStar(require("./ExpoBraintree.types"), exports);
 // ── Initialization ──────────────────────────────────────────────────────────
 async function initialize(authorization) {
     return await ExpoBraintreeModule_1.default.initialize(authorization);
+}
+/**
+ * Set the App Link return URL for PayPal/Venmo flows on Android.
+ * Must be called before tokenizePayPalCheckout/tokenizePayPalVault/tokenizeVenmo.
+ */
+async function setReturnUrl(url) {
+    return await ExpoBraintreeModule_1.default.setReturnUrl(url);
 }
 // ── Card ────────────────────────────────────────────────────────────────────
 async function tokenizeCard(card) {

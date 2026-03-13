@@ -1,6 +1,11 @@
 import type { CardData, CardNonce, ApplePayRequest, ApplePayNonce, GooglePayRequest, GooglePayNonce, PayPalCheckoutRequest, PayPalVaultRequest, PayPalNonce, VenmoRequest, VenmoNonce } from "./ExpoBraintree.types";
 export * from "./ExpoBraintree.types";
 export declare function initialize(authorization: string): Promise<void>;
+/**
+ * Set the App Link return URL for PayPal/Venmo flows on Android.
+ * Must be called before tokenizePayPalCheckout/tokenizePayPalVault/tokenizeVenmo.
+ */
+export declare function setReturnUrl(url: string): Promise<void>;
 export declare function tokenizeCard(card: CardData): Promise<CardNonce>;
 export declare function isApplePaySupported(): Promise<boolean>;
 export declare function tokenizeApplePay(request: ApplePayRequest): Promise<ApplePayNonce>;
