@@ -22,6 +22,14 @@ export async function initialize(authorization: string): Promise<void> {
   return await ExpoBraintreeModule.initialize(authorization);
 }
 
+/**
+ * Set the App Link return URL for PayPal/Venmo flows on Android.
+ * Must be called before tokenizePayPalCheckout/tokenizePayPalVault/tokenizeVenmo.
+ */
+export async function setReturnUrl(url: string): Promise<void> {
+  return await ExpoBraintreeModule.setReturnUrl(url);
+}
+
 // ── Card ────────────────────────────────────────────────────────────────────
 
 export async function tokenizeCard(card: CardData): Promise<CardNonce> {

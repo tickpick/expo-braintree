@@ -1,66 +1,140 @@
 package expo.modules.braintree
 
-import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.ComponentActivity
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
-import com.braintreepayments.api.BraintreeClient
-import com.braintreepayments.api.Card
-import com.braintreepayments.api.CardClient
-import com.braintreepayments.api.CardNonce
-import com.braintreepayments.api.CardResult
-import com.braintreepayments.api.GooglePayClient
-import com.braintreepayments.api.GooglePayRequest
-import com.braintreepayments.api.GooglePayCardNonce
-import com.braintreepayments.api.GooglePayResult
-import com.braintreepayments.api.PayPalClient
-import com.braintreepayments.api.PayPalCheckoutRequest
-import com.braintreepayments.api.PayPalVaultRequest
-import com.braintreepayments.api.PayPalAccountNonce
-import com.braintreepayments.api.PayPalResult
-import com.braintreepayments.api.VenmoClient
-import com.braintreepayments.api.VenmoRequest
-import com.braintreepayments.api.VenmoPaymentMethodUsage
-import com.braintreepayments.api.VenmoAccountNonce
-import com.braintreepayments.api.VenmoResult
-import com.braintreepayments.api.PostalAddress
-import com.google.android.gms.wallet.TransactionInfo
-import com.google.android.gms.wallet.WalletConstants
+
+// Card
+import com.braintreepayments.api.card.CardClient
+import com.braintreepayments.api.card.Card
+import com.braintreepayments.api.card.CardResult
+
+// Google Pay
+import com.braintreepayments.api.googlepay.GooglePayClient
+import com.braintreepayments.api.googlepay.GooglePayRequest
+import com.braintreepayments.api.googlepay.GooglePayResult
+import com.braintreepayments.api.googlepay.GooglePayCardNonce
+import com.braintreepayments.api.googlepay.GooglePayLauncher
+import com.braintreepayments.api.googlepay.GooglePayPaymentAuthRequest
+import com.braintreepayments.api.googlepay.GooglePayPaymentAuthResult
+import com.braintreepayments.api.googlepay.GooglePayReadinessResult
+import com.braintreepayments.api.googlepay.GooglePayTotalPriceStatus
+
+// PayPal
+import com.braintreepayments.api.paypal.PayPalClient
+import com.braintreepayments.api.paypal.PayPalCheckoutRequest
+import com.braintreepayments.api.paypal.PayPalVaultRequest
+import com.braintreepayments.api.paypal.PayPalAccountNonce
+import com.braintreepayments.api.paypal.PayPalResult
+import com.braintreepayments.api.paypal.PayPalPaymentIntent
+import com.braintreepayments.api.paypal.PayPalPaymentUserAction
+import com.braintreepayments.api.paypal.PayPalLauncher
+import com.braintreepayments.api.paypal.PayPalPaymentAuthRequest
+import com.braintreepayments.api.paypal.PayPalPaymentAuthResult
+import com.braintreepayments.api.paypal.PayPalPendingRequest
+
+// Venmo
+import com.braintreepayments.api.venmo.VenmoClient
+import com.braintreepayments.api.venmo.VenmoRequest
+import com.braintreepayments.api.venmo.VenmoResult
+import com.braintreepayments.api.venmo.VenmoAccountNonce
+import com.braintreepayments.api.venmo.VenmoPaymentMethodUsage
+import com.braintreepayments.api.venmo.VenmoLauncher
+import com.braintreepayments.api.venmo.VenmoPaymentAuthRequest
+import com.braintreepayments.api.venmo.VenmoPaymentAuthResult
+import com.braintreepayments.api.venmo.VenmoPendingRequest
+
+// Core
+import com.braintreepayments.api.core.PostalAddress
 
 class ExpoBraintreeModule : Module() {
-  private var braintreeClient: BraintreeClient? = null
+  private var authorization: String? = null
+  private var appLinkReturnUrl: Uri? = null
 
-  private val activity: Activity
+  // Google Pay state
+  private var googlePayLauncher: GooglePayLauncher? = null
+  private var googlePayClient: GooglePayClient? = null
+  private var googlePayPromise: Promise? = null
+
+  // PayPal state
+  private val payPalLauncher = PayPalLauncher()
+  private var payPalClient: PayPalClient? = null
+  private var payPalPendingRequestString: String? = null
+  private var payPalPromise: Promise? = null
+
+  // Venmo state
+  private val venmoLauncher = VenmoLauncher()
+  private var venmoClient: VenmoClient? = null
+  private var venmoPendingRequestString: String? = null
+  private var venmoPromise: Promise? = null
+
+  private val currentActivity
     get() = appContext.activityProvider?.currentActivity
+      ?: throw BraintreeNotInitializedException()
+
+  private val currentContext: Context
+    get() = appContext.reactContext
       ?: throw BraintreeNotInitializedException()
 
   override fun definition() = ModuleDefinition {
     Name("ExpoBraintree")
 
+    // Handle PayPal/Venmo return from browser/app
+    OnNewIntent { intent ->
+      handlePayPalReturn(intent)
+      handleVenmoReturn(intent)
+    }
+
+    OnActivityEntersForeground {
+      currentActivity.intent?.let { intent ->
+        handlePayPalReturn(intent)
+        handleVenmoReturn(intent)
+      }
+    }
+
     // ── Initialization ────────────────────────────────────────────────────
 
-    AsyncFunction("initialize") { authorization: String ->
-      braintreeClient = BraintreeClient(activity, authorization)
+    AsyncFunction("initialize") { auth: String ->
+      authorization = auth
+
+      // Try to initialize Google Pay launcher (needs ComponentActivity)
+      try {
+        val activity = currentActivity
+        if (activity is ComponentActivity && googlePayLauncher == null) {
+          googlePayLauncher = GooglePayLauncher(activity) { paymentAuthResult ->
+            handleGooglePayReturn(paymentAuthResult)
+          }
+        }
+      } catch (_: Exception) {
+        // Google Pay launcher creation may fail if called after onStart
+      }
+    }
+
+    AsyncFunction("setReturnUrl") { url: String ->
+      appLinkReturnUrl = Uri.parse(url)
     }
 
     // ── Card Tokenization ─────────────────────────────────────────────────
 
     AsyncFunction("tokenizeCard") { cardData: CardDataRecord, promise: Promise ->
-      val client = requireClient()
-      val cardClient = CardClient(client)
+      val auth = requireAuth()
+      val cardClient = CardClient(currentContext, auth)
 
-      val card = Card().apply {
-        number = cardData.number
-        expirationMonth = cardData.expirationMonth
-        expirationYear = cardData.expirationYear
-        cvv = cardData.cvv
-        postalCode = cardData.postalCode
+      val card = Card(
+        number = cardData.number,
+        expirationMonth = cardData.expirationMonth,
+        expirationYear = cardData.expirationYear,
+        cvv = cardData.cvv,
+        postalCode = cardData.postalCode,
         cardholderName = cardData.cardholderName
-      }
+      )
 
       cardClient.tokenize(card) { result ->
         when (result) {
@@ -70,12 +144,11 @@ class ExpoBraintreeModule : Module() {
               "nonce" to nonce.string,
               "type" to "card",
               "isDefault" to nonce.isDefault,
-              "description" to nonce.string,
-              "cardNetwork" to nonce.cardNetwork,
+              "cardNetwork" to nonce.cardType,
               "lastFour" to nonce.lastFour,
               "expirationMonth" to nonce.expirationMonth,
               "expirationYear" to nonce.expirationYear,
-              "bin" to nonce.bin,
+              "bin" to nonce.bin
             ))
           }
           is CardResult.Failure -> {
@@ -88,72 +161,60 @@ class ExpoBraintreeModule : Module() {
     // ── Google Pay ─────────────────────────────────────────────────────────
 
     AsyncFunction("isGooglePayReady") { _: Map<String, Any>, promise: Promise ->
-      val client = requireClient()
-      val googlePayClient = GooglePayClient(activity, client)
+      val auth = requireAuth()
+      val client = GooglePayClient(currentContext, auth)
+      googlePayClient = client
 
-      val readyRequest = GooglePayRequest().apply {
-        isEmailRequired = false
-      }
-
-      googlePayClient.isReadyToPay(activity, readyRequest) { isReady, error ->
-        if (error != null) {
-          promise.reject(CodedException("GOOGLE_PAY_READY_ERROR", error.message, error))
-        } else {
-          promise.resolve(isReady)
+      client.isReadyToPay(currentContext) { readinessResult ->
+        when (readinessResult) {
+          is GooglePayReadinessResult.ReadyToPay -> promise.resolve(true)
+          else -> promise.resolve(false)
         }
       }
     }
 
     AsyncFunction("tokenizeGooglePay") { request: GooglePayRequestRecord, promise: Promise ->
-      val client = requireClient()
-      val googlePayClient = GooglePayClient(activity, client)
+      val auth = requireAuth()
+      val client = googlePayClient ?: GooglePayClient(currentContext, auth)
+      googlePayClient = client
 
-      val googlePayRequest = GooglePayRequest().apply {
-        transactionInfo = TransactionInfo.newBuilder()
-          .setTotalPrice(request.totalPrice)
-          .setTotalPriceStatus(
-            when (request.totalPriceStatus) {
-              "ESTIMATED" -> WalletConstants.TOTAL_PRICE_STATUS_ESTIMATED
-              "NOT_CURRENTLY_KNOWN" -> WalletConstants.TOTAL_PRICE_STATUS_NOT_CURRENTLY_KNOWN
-              else -> WalletConstants.TOTAL_PRICE_STATUS_FINAL
-            }
-          )
-          .setCurrencyCode(request.currencyCode)
-          .build()
-        isBillingAddressRequired = request.billingAddressRequired ?: false
-        isEmailRequired = request.emailRequired ?: false
-        isShippingAddressRequired = request.shippingAddressRequired ?: false
-        googleMerchantId = request.googleMerchantId
-        googleMerchantName = request.merchantName
+      val launcher = googlePayLauncher
+        ?: throw CodedException(
+          "GOOGLE_PAY_NOT_READY",
+          "GooglePay launcher not initialized. Call initialize() early in your app lifecycle.",
+          null
+        )
+
+      googlePayPromise = promise
+
+      val totalPriceStatus = when (request.totalPriceStatus) {
+        "ESTIMATED" -> GooglePayTotalPriceStatus.TOTAL_PRICE_STATUS_ESTIMATED
+        else -> GooglePayTotalPriceStatus.TOTAL_PRICE_STATUS_FINAL
       }
 
-      googlePayClient.setListener { result ->
-        when (result) {
-          is GooglePayResult.Success -> {
-            val nonce = result.nonce
-            val gpNonce = nonce as? GooglePayCardNonce
-            promise.resolve(mapOf(
-              "nonce" to nonce.string,
-              "type" to "googlePay",
-              "isDefault" to nonce.isDefault,
-              "description" to nonce.string,
-              "email" to gpNonce?.email,
-              "billingAddress" to gpNonce?.billingAddress?.let { serializePostalAddress(it) },
-              "shippingAddress" to gpNonce?.shippingAddress?.let { serializePostalAddress(it) },
-            ))
-          }
-          is GooglePayResult.Failure -> {
-            promise.reject(CodedException("GOOGLE_PAY_ERROR", result.error.message, result.error))
-          }
-          is GooglePayResult.Cancel -> {
-            promise.reject(CodedException("GOOGLE_PAY_CANCELLED", "User cancelled Google Pay", null))
-          }
-        }
-      }
+      val googlePayRequest = GooglePayRequest(
+        currencyCode = request.currencyCode,
+        totalPrice = request.totalPrice,
+        totalPriceStatus = totalPriceStatus,
+        isBillingAddressRequired = request.billingAddressRequired ?: false,
+        isEmailRequired = request.emailRequired ?: false,
+        isShippingAddressRequired = request.shippingAddressRequired ?: false,
+        allowPrepaidCards = request.allowPrepaidCards ?: true,
+        googleMerchantName = request.merchantName,
+        countryCode = request.countryCode
+      )
 
-      googlePayClient.requestPayment(activity, googlePayRequest) { error ->
-        if (error != null) {
-          promise.reject(CodedException("GOOGLE_PAY_REQUEST_ERROR", error.message, error))
+      client.createPaymentAuthRequest(googlePayRequest) { paymentAuthRequest ->
+        when (paymentAuthRequest) {
+          is GooglePayPaymentAuthRequest.ReadyToLaunch -> {
+            launcher.launch(paymentAuthRequest)
+          }
+          is GooglePayPaymentAuthRequest.Failure -> {
+            googlePayPromise?.reject(
+              CodedException("GOOGLE_PAY_ERROR", paymentAuthRequest.error.message, paymentAuthRequest.error)
+            )
+            googlePayPromise = null
+          }
         }
       }
     }
@@ -161,40 +222,54 @@ class ExpoBraintreeModule : Module() {
     // ── PayPal Checkout ───────────────────────────────────────────────────
 
     AsyncFunction("tokenizePayPalCheckout") { request: PayPalCheckoutRequestRecord, promise: Promise ->
-      val client = requireClient()
-      val payPalClient = PayPalClient(activity, client)
+      val auth = requireAuth()
+      val returnUrl = appLinkReturnUrl
+        ?: throw CodedException("PAYPAL_NOT_CONFIGURED", "Return URL not set. Call setReturnUrl() first.", null)
 
-      val checkoutRequest = PayPalCheckoutRequest(request.amount).apply {
-        currencyCode = request.currencyCode ?: "USD"
+      val client = PayPalClient(currentContext, auth, returnUrl)
+      payPalClient = client
+      payPalPromise = promise
+
+      val checkoutRequest = PayPalCheckoutRequest(
+        amount = request.amount,
+        hasUserLocationConsent = true,
         intent = when (request.intent) {
-          "sale" -> com.braintreepayments.api.PayPalPaymentIntent.SALE
-          "order" -> com.braintreepayments.api.PayPalPaymentIntent.ORDER
-          else -> com.braintreepayments.api.PayPalPaymentIntent.AUTHORIZE
-        }
-        if (request.userAction == "commit") {
-          userAction = com.braintreepayments.api.PayPalPaymentUserAction.PAY_NOW
-        }
-        isShippingAddressRequired = request.shippingAddressRequired ?: false
-        isShippingAddressEditable = request.shippingAddressEditable ?: false
-      }
+          "sale" -> PayPalPaymentIntent.SALE
+          "order" -> PayPalPaymentIntent.ORDER
+          else -> PayPalPaymentIntent.AUTHORIZE
+        },
+        currencyCode = request.currencyCode ?: "USD",
+        isShippingAddressRequired = request.shippingAddressRequired ?: false,
+        isShippingAddressEditable = request.shippingAddressEditable ?: false,
+        userAction = if (request.userAction == "commit")
+          PayPalPaymentUserAction.USER_ACTION_COMMIT
+        else
+          PayPalPaymentUserAction.USER_ACTION_DEFAULT,
+        displayName = request.displayName
+      )
 
-      payPalClient.setListener { result ->
-        when (result) {
-          is PayPalResult.Success -> {
-            promise.resolve(serializePayPalNonce(result.nonce))
+      client.createPaymentAuthRequest(currentContext, checkoutRequest) { paymentAuthRequest ->
+        when (paymentAuthRequest) {
+          is PayPalPaymentAuthRequest.ReadyToLaunch -> {
+            val pendingRequest = payPalLauncher.launch(currentActivity as ComponentActivity, paymentAuthRequest)
+            when (pendingRequest) {
+              is PayPalPendingRequest.Started -> {
+                payPalPendingRequestString = pendingRequest.pendingRequestString
+              }
+              is PayPalPendingRequest.Failure -> {
+                payPalPromise?.reject(
+                  CodedException("PAYPAL_LAUNCH_ERROR", pendingRequest.error.message, pendingRequest.error)
+                )
+                payPalPromise = null
+              }
+            }
           }
-          is PayPalResult.Failure -> {
-            promise.reject(CodedException("PAYPAL_ERROR", result.error.message, result.error))
+          is PayPalPaymentAuthRequest.Failure -> {
+            payPalPromise?.reject(
+              CodedException("PAYPAL_ERROR", paymentAuthRequest.error.message, paymentAuthRequest.error)
+            )
+            payPalPromise = null
           }
-          is PayPalResult.Cancel -> {
-            promise.reject(CodedException("PAYPAL_CANCELLED", "User cancelled PayPal", null))
-          }
-        }
-      }
-
-      payPalClient.tokenizePayPalAccount(activity, checkoutRequest) { error ->
-        if (error != null) {
-          promise.reject(CodedException("PAYPAL_LAUNCH_ERROR", error.message, error))
         }
       }
     }
@@ -202,33 +277,45 @@ class ExpoBraintreeModule : Module() {
     // ── PayPal Vault ──────────────────────────────────────────────────────
 
     AsyncFunction("tokenizePayPalVault") { request: PayPalVaultRequestRecord, promise: Promise ->
-      val client = requireClient()
-      val payPalClient = PayPalClient(activity, client)
+      val auth = requireAuth()
+      val returnUrl = appLinkReturnUrl
+        ?: throw CodedException("PAYPAL_NOT_CONFIGURED", "Return URL not set. Call setReturnUrl() first.", null)
 
-      val vaultRequest = PayPalVaultRequest().apply {
-        billingAgreementDescription = request.billingAgreementDescription
-        userAuthenticationEmail = request.userAuthenticationEmail
-        isShippingAddressRequired = request.shippingAddressRequired ?: false
-        isShippingAddressEditable = request.shippingAddressEditable ?: false
-      }
+      val client = PayPalClient(currentContext, auth, returnUrl)
+      payPalClient = client
+      payPalPromise = promise
 
-      payPalClient.setListener { result ->
-        when (result) {
-          is PayPalResult.Success -> {
-            promise.resolve(serializePayPalNonce(result.nonce))
-          }
-          is PayPalResult.Failure -> {
-            promise.reject(CodedException("PAYPAL_ERROR", result.error.message, result.error))
-          }
-          is PayPalResult.Cancel -> {
-            promise.reject(CodedException("PAYPAL_CANCELLED", "User cancelled PayPal", null))
-          }
-        }
-      }
+      val vaultRequest = PayPalVaultRequest(
+        hasUserLocationConsent = true,
+        billingAgreementDescription = request.billingAgreementDescription,
+        userAuthenticationEmail = request.userAuthenticationEmail,
+        isShippingAddressRequired = request.shippingAddressRequired ?: false,
+        isShippingAddressEditable = request.shippingAddressEditable ?: false,
+        displayName = request.displayName
+      )
 
-      payPalClient.tokenizePayPalAccount(activity, vaultRequest) { error ->
-        if (error != null) {
-          promise.reject(CodedException("PAYPAL_LAUNCH_ERROR", error.message, error))
+      client.createPaymentAuthRequest(currentContext, vaultRequest) { paymentAuthRequest ->
+        when (paymentAuthRequest) {
+          is PayPalPaymentAuthRequest.ReadyToLaunch -> {
+            val pendingRequest = payPalLauncher.launch(currentActivity as ComponentActivity, paymentAuthRequest)
+            when (pendingRequest) {
+              is PayPalPendingRequest.Started -> {
+                payPalPendingRequestString = pendingRequest.pendingRequestString
+              }
+              is PayPalPendingRequest.Failure -> {
+                payPalPromise?.reject(
+                  CodedException("PAYPAL_LAUNCH_ERROR", pendingRequest.error.message, pendingRequest.error)
+                )
+                payPalPromise = null
+              }
+            }
+          }
+          is PayPalPaymentAuthRequest.Failure -> {
+            payPalPromise?.reject(
+              CodedException("PAYPAL_ERROR", paymentAuthRequest.error.message, paymentAuthRequest.error)
+            )
+            payPalPromise = null
+          }
         }
       }
     }
@@ -236,55 +323,173 @@ class ExpoBraintreeModule : Module() {
     // ── Venmo ─────────────────────────────────────────────────────────────
 
     AsyncFunction("tokenizeVenmo") { request: VenmoRequestRecord, promise: Promise ->
-      val client = requireClient()
-      val venmoClient = VenmoClient(activity, client)
+      val auth = requireAuth()
+      val returnUrl = appLinkReturnUrl
+        ?: throw CodedException("VENMO_NOT_CONFIGURED", "Return URL not set. Call setReturnUrl() first.", null)
+
+      val client = VenmoClient(currentContext, auth, returnUrl)
+      venmoClient = client
+      venmoPromise = promise
 
       val venmoRequest = VenmoRequest(
-        when (request.paymentMethodUsage) {
+        paymentMethodUsage = when (request.paymentMethodUsage) {
           "multiUse" -> VenmoPaymentMethodUsage.MULTI_USE
           else -> VenmoPaymentMethodUsage.SINGLE_USE
-        }
-      ).apply {
-        profileId = request.profileId
-        collectCustomerBillingAddress = request.collectCustomerBillingAddress ?: false
+        },
+        profileId = request.profileId,
+        collectCustomerBillingAddress = request.collectCustomerBillingAddress ?: false,
         collectCustomerShippingAddress = request.collectCustomerShippingAddress ?: false
-      }
+      )
 
-      venmoClient.setListener { result ->
-        when (result) {
-          is VenmoResult.Success -> {
-            val nonce = result.nonce
-            promise.resolve(mapOf(
-              "nonce" to nonce.string,
-              "type" to "venmo",
-              "isDefault" to nonce.isDefault,
-              "description" to nonce.string,
-              "username" to nonce.username,
-              "billingAddress" to serializePostalAddress(nonce.billingAddress),
-              "shippingAddress" to serializePostalAddress(nonce.shippingAddress),
-            ))
+      client.createPaymentAuthRequest(currentContext, venmoRequest) { paymentAuthRequest ->
+        when (paymentAuthRequest) {
+          is VenmoPaymentAuthRequest.ReadyToLaunch -> {
+            val pendingRequest = venmoLauncher.launch(currentActivity as ComponentActivity, paymentAuthRequest)
+            when (pendingRequest) {
+              is VenmoPendingRequest.Started -> {
+                venmoPendingRequestString = pendingRequest.pendingRequestString
+              }
+              is VenmoPendingRequest.Failure -> {
+                venmoPromise?.reject(
+                  CodedException("VENMO_LAUNCH_ERROR", pendingRequest.error.message, pendingRequest.error)
+                )
+                venmoPromise = null
+              }
+            }
           }
-          is VenmoResult.Failure -> {
-            promise.reject(CodedException("VENMO_ERROR", result.error.message, result.error))
-          }
-          is VenmoResult.Cancel -> {
-            promise.reject(CodedException("VENMO_CANCELLED", "User cancelled Venmo", null))
+          is VenmoPaymentAuthRequest.Failure -> {
+            venmoPromise?.reject(
+              CodedException("VENMO_ERROR", paymentAuthRequest.error.message, paymentAuthRequest.error)
+            )
+            venmoPromise = null
           }
         }
       }
+    }
+  }
 
-      venmoClient.tokenizeVenmoAccount(activity, venmoRequest) { error ->
-        if (error != null) {
-          promise.reject(CodedException("VENMO_LAUNCH_ERROR", error.message, error))
+  // ── Return Handlers ──────────────────────────────────────────────────
+
+  private fun handleGooglePayReturn(paymentAuthResult: GooglePayPaymentAuthResult) {
+    val client = googlePayClient ?: return
+    val promise = googlePayPromise ?: return
+    googlePayPromise = null
+
+    client.tokenize(paymentAuthResult) { result ->
+      when (result) {
+        is GooglePayResult.Success -> {
+          val nonce = result.nonce as? GooglePayCardNonce
+          promise.resolve(mapOf(
+            "nonce" to (nonce?.string ?: result.nonce.string),
+            "type" to "googlePay",
+            "isDefault" to (nonce?.isDefault ?: result.nonce.isDefault),
+            "email" to nonce?.email,
+            "cardNetwork" to nonce?.cardNetwork,
+            "lastFour" to nonce?.lastFour,
+            "billingAddress" to serializePostalAddress(nonce?.billingAddress),
+            "shippingAddress" to serializePostalAddress(nonce?.shippingAddress)
+          ))
         }
+        is GooglePayResult.Failure -> {
+          promise.reject(CodedException("GOOGLE_PAY_ERROR", result.error.message, result.error))
+        }
+        is GooglePayResult.Cancel -> {
+          promise.reject(CodedException("GOOGLE_PAY_CANCELLED", "User cancelled Google Pay", null))
+        }
+      }
+    }
+  }
+
+  private fun handlePayPalReturn(intent: Intent) {
+    val pendingStr = payPalPendingRequestString ?: return
+    val client = payPalClient ?: return
+    val promise = payPalPromise ?: return
+
+    val paymentAuthResult = payPalLauncher.handleReturnToApp(
+      PayPalPendingRequest.Started(pendingStr), intent
+    )
+
+    when (paymentAuthResult) {
+      is PayPalPaymentAuthResult.Success -> {
+        payPalPendingRequestString = null
+        payPalPromise = null
+
+        client.tokenize(paymentAuthResult) { result ->
+          when (result) {
+            is PayPalResult.Success -> {
+              promise.resolve(serializePayPalNonce(result.nonce))
+            }
+            is PayPalResult.Failure -> {
+              promise.reject(CodedException("PAYPAL_ERROR", result.error.message, result.error))
+            }
+            is PayPalResult.Cancel -> {
+              promise.reject(CodedException("PAYPAL_CANCELLED", "User cancelled PayPal", null))
+            }
+          }
+        }
+      }
+      is PayPalPaymentAuthResult.Failure -> {
+        payPalPendingRequestString = null
+        payPalPromise = null
+        promise.reject(CodedException("PAYPAL_ERROR", paymentAuthResult.error.message, paymentAuthResult.error))
+      }
+      is PayPalPaymentAuthResult.NoResult -> {
+        // User returned without completing flow, keep waiting
+      }
+    }
+  }
+
+  private fun handleVenmoReturn(intent: Intent) {
+    val pendingStr = venmoPendingRequestString ?: return
+    val client = venmoClient ?: return
+    val promise = venmoPromise ?: return
+
+    val paymentAuthResult = venmoLauncher.handleReturnToApp(
+      VenmoPendingRequest.Started(pendingStr), intent
+    )
+
+    when (paymentAuthResult) {
+      is VenmoPaymentAuthResult.Success -> {
+        venmoPendingRequestString = null
+        venmoPromise = null
+
+        client.tokenize(paymentAuthResult) { result ->
+          when (result) {
+            is VenmoResult.Success -> {
+              val nonce = result.nonce
+              promise.resolve(mapOf(
+                "nonce" to nonce.string,
+                "type" to "venmo",
+                "isDefault" to nonce.isDefault,
+                "username" to nonce.username,
+                "billingAddress" to serializePostalAddress(nonce.billingAddress),
+                "shippingAddress" to serializePostalAddress(nonce.shippingAddress)
+              ))
+            }
+            is VenmoResult.Failure -> {
+              promise.reject(CodedException("VENMO_ERROR", result.error.message, result.error))
+            }
+            is VenmoResult.Cancel -> {
+              promise.reject(CodedException("VENMO_CANCELLED", "User cancelled Venmo", null))
+            }
+          }
+        }
+      }
+      is VenmoPaymentAuthResult.Failure -> {
+        venmoPendingRequestString = null
+        venmoPromise = null
+        promise.reject(CodedException("VENMO_ERROR", paymentAuthResult.error.message, paymentAuthResult.error))
+      }
+      is VenmoPaymentAuthResult.NoResult -> {
+        // User returned without completing flow, keep waiting
       }
     }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
-  private fun requireClient(): BraintreeClient {
-    return braintreeClient ?: throw BraintreeNotInitializedException()
+  private fun requireAuth(): String {
+    return authorization ?: throw BraintreeNotInitializedException()
   }
 
   private fun serializePayPalNonce(nonce: PayPalAccountNonce): Map<String, Any?> {
@@ -292,12 +497,11 @@ class ExpoBraintreeModule : Module() {
       "nonce" to nonce.string,
       "type" to "paypal",
       "isDefault" to nonce.isDefault,
-      "description" to nonce.string,
       "email" to nonce.email,
       "firstName" to nonce.firstName,
       "lastName" to nonce.lastName,
       "billingAddress" to serializePostalAddress(nonce.billingAddress),
-      "shippingAddress" to serializePostalAddress(nonce.shippingAddress),
+      "shippingAddress" to serializePostalAddress(nonce.shippingAddress)
     )
   }
 
@@ -310,7 +514,7 @@ class ExpoBraintreeModule : Module() {
       "locality" to address.locality,
       "region" to address.region,
       "postalCode" to address.postalCode,
-      "countryCodeAlpha2" to address.countryCodeAlpha2,
+      "countryCodeAlpha2" to address.countryCodeAlpha2
     )
   }
 }
@@ -336,7 +540,6 @@ class GooglePayRequestRecord : Record {
   @Field val billingAddressRequired: Boolean? = false
   @Field val emailRequired: Boolean? = false
   @Field val shippingAddressRequired: Boolean? = false
-  @Field val googleMerchantId: String? = null
 }
 
 class PayPalCheckoutRequestRecord : Record {
@@ -359,7 +562,6 @@ class PayPalVaultRequestRecord : Record {
 
 class VenmoRequestRecord : Record {
   @Field val paymentMethodUsage: String = "singleUse"
-  @Field val universalLink: String = ""
   @Field val profileId: String? = null
   @Field val displayName: String? = null
   @Field val collectCustomerBillingAddress: Boolean? = false

@@ -55,12 +55,12 @@ android {
   }
 
   compileOptions {
-    sourceCompatibility JavaVersion.VERSION_11
-    targetCompatibility JavaVersion.VERSION_11
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
   }
 
   kotlinOptions {
-    jvmTarget = JavaVersion.VERSION_11.majorVersion
+    jvmTarget = JavaVersion.VERSION_17.majorVersion
   }
 }
 
@@ -68,10 +68,10 @@ dependencies {
   implementation project(':expo-modules-core')
   implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${safeExtGet('kotlinVersion', '1.9.25')}"
 
-  // Braintree SDK
-  implementation 'com.braintreepayments.api:card:5.22.0'
-  implementation 'com.braintreepayments.api:google-pay:5.22.0'
-  implementation 'com.braintreepayments.api:paypal:5.22.0'
-  implementation 'com.braintreepayments.api:venmo:5.22.0'
-  implementation 'com.braintreepayments.api:data-collector:5.22.0'
+  // Braintree SDK v5
+  implementation 'com.braintreepayments.api:card:5.24.0'
+  implementation 'com.braintreepayments.api:google-pay:5.24.0'
+  implementation 'com.braintreepayments.api:paypal:5.24.0'
+  implementation 'com.braintreepayments.api:venmo:5.24.0'
+  implementation 'com.braintreepayments.api:data-collector:5.24.0'
 }
