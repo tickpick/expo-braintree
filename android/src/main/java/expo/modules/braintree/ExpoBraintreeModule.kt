@@ -251,7 +251,7 @@ class ExpoBraintreeModule : Module() {
       client.createPaymentAuthRequest(currentContext, checkoutRequest) { paymentAuthRequest ->
         when (paymentAuthRequest) {
           is PayPalPaymentAuthRequest.ReadyToLaunch -> {
-            val pendingRequest = payPalLauncher.launch(currentActivity, paymentAuthRequest)
+            val pendingRequest = payPalLauncher.launch(currentActivity as ComponentActivity, paymentAuthRequest)
             when (pendingRequest) {
               is PayPalPendingRequest.Started -> {
                 payPalPendingRequestString = pendingRequest.pendingRequestString
@@ -297,7 +297,7 @@ class ExpoBraintreeModule : Module() {
       client.createPaymentAuthRequest(currentContext, vaultRequest) { paymentAuthRequest ->
         when (paymentAuthRequest) {
           is PayPalPaymentAuthRequest.ReadyToLaunch -> {
-            val pendingRequest = payPalLauncher.launch(currentActivity, paymentAuthRequest)
+            val pendingRequest = payPalLauncher.launch(currentActivity as ComponentActivity, paymentAuthRequest)
             when (pendingRequest) {
               is PayPalPendingRequest.Started -> {
                 payPalPendingRequestString = pendingRequest.pendingRequestString
@@ -344,7 +344,7 @@ class ExpoBraintreeModule : Module() {
       client.createPaymentAuthRequest(currentContext, venmoRequest) { paymentAuthRequest ->
         when (paymentAuthRequest) {
           is VenmoPaymentAuthRequest.ReadyToLaunch -> {
-            val pendingRequest = venmoLauncher.launch(currentActivity, paymentAuthRequest)
+            val pendingRequest = venmoLauncher.launch(currentActivity as ComponentActivity, paymentAuthRequest)
             when (pendingRequest) {
               is VenmoPendingRequest.Started -> {
                 venmoPendingRequestString = pendingRequest.pendingRequestString
@@ -378,16 +378,16 @@ class ExpoBraintreeModule : Module() {
     client.tokenize(paymentAuthResult) { result ->
       when (result) {
         is GooglePayResult.Success -> {
-          val nonce = result.nonce
+          val nonce = result.nonce as? GooglePayCardNonce
           promise.resolve(mapOf(
-            "nonce" to nonce.string,
+            "nonce" to (nonce?.string ?: result.nonce.string),
             "type" to "googlePay",
-            "isDefault" to nonce.isDefault,
-            "email" to nonce.email,
-            "cardNetwork" to nonce.cardNetwork,
-            "lastFour" to nonce.lastFour,
-            "billingAddress" to serializePostalAddress(nonce.billingAddress),
-            "shippingAddress" to serializePostalAddress(nonce.shippingAddress)
+            "isDefault" to (nonce?.isDefault ?: result.nonce.isDefault),
+            "email" to nonce?.email,
+            "cardNetwork" to nonce?.cardNetwork,
+            "lastFour" to nonce?.lastFour,
+            "billingAddress" to serializePostalAddress(nonce?.billingAddress),
+            "shippingAddress" to serializePostalAddress(nonce?.shippingAddress)
           ))
         }
         is GooglePayResult.Failure -> {
