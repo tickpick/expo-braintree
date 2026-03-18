@@ -16,7 +16,7 @@ Add the config plugin to your `app.json` / `app.config.ts`:
 {
   "plugins": [
     [
-      "expo-braintree",
+      "@tickpick/expo-braintree",
       {
         "merchantIdentifier": "merchant.com.your.app",
         "urlScheme": "com.your.app.payments",
