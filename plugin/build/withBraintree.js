@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_plugins_1 = require("expo/config-plugins");
+const codeMod_1 = require("@expo/config-plugins/build/android/codeMod");
+const generateCode_1 = require("@expo/config-plugins/build/utils/generateCode");
 const withBraintree = (config, props) => {
     const { merchantIdentifier, urlScheme, enableVenmo = true, enablePayPal = true, enableGooglePay = true, } = props ?? {};
     // iOS: Apple Pay entitlement
@@ -17,6 +19,9 @@ const withBraintree = (config, props) => {
         enablePayPal,
         enableGooglePay,
     });
+    if (enableGooglePay) {
+        config = withGooglePayMainActivity(config);
+    }
     return config;
 };
 // ── iOS: Apple Pay entitlement ──────────────────────────────────────────────
@@ -39,6 +44,41 @@ const withBraintreeURLScheme = (config, urlScheme) => {
             });
         }
         mod.modResults.CFBundleURLTypes = schemes;
+        return mod;
+    });
+};
+// ── Android: Google Pay launcher registration in MainActivity ───────────────
+// Braintree's GooglePayLauncher wraps an androidx ActivityResultLauncher,
+// which Android only allows registering before the host Activity passes
+// STARTED — every Expo module lifecycle hook (OnCreate, initialize(), etc.)
+// fires after that point in a React Native app, so registration has to be
+// injected directly into MainActivity instead. See GooglePayLauncherHolder.kt.
+const withGooglePayMainActivity = (config) => {
+    return (0, config_plugins_1.withMainActivity)(config, (mod) => {
+        try {
+            const isJava = mod.modResults.language === "java";
+            let contents = (0, codeMod_1.addImports)(mod.modResults.contents, ["expo.modules.braintree.GooglePayLauncherHolder"], isJava);
+            const registerCall = isJava
+                ? "    GooglePayLauncherHolder.INSTANCE.register(this);"
+                : "    GooglePayLauncherHolder.register(this)";
+            contents = (0, generateCode_1.mergeContents)({
+                src: contents,
+                comment: "    //",
+                tag: "expo-braintree-googlepay",
+                offset: 1,
+                anchor: /super\.onCreate\(.*\)/,
+                newSrc: registerCall,
+            }).contents;
+            mod.modResults.contents = contents;
+        }
+        catch (error) {
+            // A customized MainActivity without a matching `super.onCreate(...)`
+            // line should not abort the entire prebuild — Google Pay just won't
+            // work until the call is added by hand.
+            console.warn("expo-braintree: could not inject GooglePayLauncherHolder.register(this) into " +
+                "MainActivity.onCreate() — add it manually or Google Pay results will not be " +
+                `delivered. (${error instanceof Error ? error.message : error})`);
+        }
         return mod;
     });
 };
