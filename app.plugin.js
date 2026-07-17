@@ -2,7 +2,10 @@ const {
   withEntitlementsPlist,
   withInfoPlist,
   withAndroidManifest,
+  withMainActivity,
 } = require("expo/config-plugins");
+const { addImports } = require("@expo/config-plugins/build/android/codeMod");
+const { mergeContents } = require("@expo/config-plugins/build/utils/generateCode");
 
 const withBraintree = (config, props) => {
   const {
@@ -92,6 +95,39 @@ const withBraintree = (config, props) => {
 
     return mod;
   });
+
+  // Android: register GooglePayLauncher from MainActivity's real onCreate().
+  // Braintree's GooglePayLauncher wraps an androidx ActivityResultLauncher,
+  // which Android only allows registering before the host Activity passes
+  // STARTED — every Expo module lifecycle hook (OnCreate, initialize(), etc.)
+  // fires after that point in a React Native app, so registration has to be
+  // injected directly into MainActivity instead. See GooglePayLauncherHolder.kt.
+  if (enableGooglePay) {
+    config = withMainActivity(config, (mod) => {
+      const isJava = mod.modResults.language === "java";
+      let contents = addImports(
+        mod.modResults.contents,
+        ["expo.modules.braintree.GooglePayLauncherHolder"],
+        isJava
+      );
+
+      const registerCall = isJava
+        ? "    GooglePayLauncherHolder.INSTANCE.register(this);"
+        : "    GooglePayLauncherHolder.register(this)";
+
+      contents = mergeContents({
+        src: contents,
+        comment: "    //",
+        tag: "expo-braintree-googlepay",
+        offset: 1,
+        anchor: /super\.onCreate\(.*\)/,
+        newSrc: registerCall,
+      }).contents;
+
+      mod.modResults.contents = contents;
+      return mod;
+    });
+  }
 
   return config;
 };

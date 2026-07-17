@@ -3,7 +3,10 @@ import {
   withEntitlementsPlist,
   withInfoPlist,
   withAndroidManifest,
+  withMainActivity,
 } from "expo/config-plugins";
+import { addImports } from "@expo/config-plugins/build/android/codeMod";
+import { mergeContents } from "@expo/config-plugins/build/utils/generateCode";
 
 interface BraintreePluginProps {
   merchantIdentifier?: string;
@@ -42,6 +45,10 @@ const withBraintree: ConfigPlugin<BraintreePluginProps | void> = (
     enableGooglePay,
   });
 
+  if (enableGooglePay) {
+    config = withGooglePayMainActivity(config);
+  }
+
   return config;
 };
 
@@ -73,6 +80,40 @@ const withBraintreeURLScheme: ConfigPlugin<string> = (config, urlScheme) => {
       });
     }
     mod.modResults.CFBundleURLTypes = schemes;
+    return mod;
+  });
+};
+
+// ── Android: Google Pay launcher registration in MainActivity ───────────────
+
+// Braintree's GooglePayLauncher wraps an androidx ActivityResultLauncher,
+// which Android only allows registering before the host Activity passes
+// STARTED — every Expo module lifecycle hook (OnCreate, initialize(), etc.)
+// fires after that point in a React Native app, so registration has to be
+// injected directly into MainActivity instead. See GooglePayLauncherHolder.kt.
+const withGooglePayMainActivity: ConfigPlugin = (config) => {
+  return withMainActivity(config, (mod) => {
+    const isJava = mod.modResults.language === "java";
+    let contents = addImports(
+      mod.modResults.contents,
+      ["expo.modules.braintree.GooglePayLauncherHolder"],
+      isJava
+    );
+
+    const registerCall = isJava
+      ? "    GooglePayLauncherHolder.INSTANCE.register(this);"
+      : "    GooglePayLauncherHolder.register(this)";
+
+    contents = mergeContents({
+      src: contents,
+      comment: "    //",
+      tag: "expo-braintree-googlepay",
+      offset: 1,
+      anchor: /super\.onCreate\(.*\)/,
+      newSrc: registerCall,
+    }).contents;
+
+    mod.modResults.contents = contents;
     return mod;
   });
 };

@@ -21,7 +21,6 @@ import com.braintreepayments.api.googlepay.GooglePayClient
 import com.braintreepayments.api.googlepay.GooglePayRequest
 import com.braintreepayments.api.googlepay.GooglePayResult
 import com.braintreepayments.api.googlepay.GooglePayCardNonce
-import com.braintreepayments.api.googlepay.GooglePayLauncher
 import com.braintreepayments.api.googlepay.GooglePayPaymentAuthRequest
 import com.braintreepayments.api.googlepay.GooglePayPaymentAuthResult
 import com.braintreepayments.api.googlepay.GooglePayReadinessResult
@@ -58,8 +57,9 @@ class ExpoBraintreeModule : Module() {
   private var authorization: String? = null
   private var appLinkReturnUrl: Uri? = null
 
-  // Google Pay state
-  private var googlePayLauncher: GooglePayLauncher? = null
+  // Google Pay state. The launcher itself lives in GooglePayLauncherHolder —
+  // see that file for why it can't be constructed from any Expo module
+  // lifecycle hook in this app.
   private var googlePayClient: GooglePayClient? = null
   private var googlePayPromise: Promise? = null
 
@@ -86,6 +86,13 @@ class ExpoBraintreeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ExpoBraintree")
 
+    // Route Google Pay results to this module instance. GooglePayLauncherHolder
+    // is a singleton (the launcher survives module re-creation), so re-point
+    // it at whichever instance is current every time one is created.
+    OnCreate {
+      GooglePayLauncherHolder.onResult = { result -> handleGooglePayReturn(result) }
+    }
+
     // Handle PayPal/Venmo return from browser/app
     OnNewIntent { intent ->
       handlePayPalReturn(intent)
@@ -103,18 +110,6 @@ class ExpoBraintreeModule : Module() {
 
     AsyncFunction("initialize") { auth: String ->
       authorization = auth
-
-      // Try to initialize Google Pay launcher (needs ComponentActivity)
-      try {
-        val activity = currentActivity
-        if (activity is ComponentActivity && googlePayLauncher == null) {
-          googlePayLauncher = GooglePayLauncher(activity) { paymentAuthResult ->
-            handleGooglePayReturn(paymentAuthResult)
-          }
-        }
-      } catch (_: Exception) {
-        // Google Pay launcher creation may fail if called after onStart
-      }
     }
 
     AsyncFunction("setReturnUrl") { url: String ->
@@ -178,10 +173,10 @@ class ExpoBraintreeModule : Module() {
       val client = googlePayClient ?: GooglePayClient(currentContext, auth)
       googlePayClient = client
 
-      val launcher = googlePayLauncher
+      val launcher = GooglePayLauncherHolder.launcher
         ?: throw CodedException(
           "GOOGLE_PAY_NOT_READY",
-          "GooglePay launcher not initialized. Call initialize() early in your app lifecycle.",
+          "GooglePay launcher not initialized — MainActivity.onCreate() must call GooglePayLauncherHolder.register(this).",
           null
         )
 
