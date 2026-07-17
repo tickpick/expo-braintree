@@ -93,27 +93,38 @@ const withBraintreeURLScheme: ConfigPlugin<string> = (config, urlScheme) => {
 // injected directly into MainActivity instead. See GooglePayLauncherHolder.kt.
 const withGooglePayMainActivity: ConfigPlugin = (config) => {
   return withMainActivity(config, (mod) => {
-    const isJava = mod.modResults.language === "java";
-    let contents = addImports(
-      mod.modResults.contents,
-      ["expo.modules.braintree.GooglePayLauncherHolder"],
-      isJava
-    );
+    try {
+      const isJava = mod.modResults.language === "java";
+      let contents = addImports(
+        mod.modResults.contents,
+        ["expo.modules.braintree.GooglePayLauncherHolder"],
+        isJava
+      );
 
-    const registerCall = isJava
-      ? "    GooglePayLauncherHolder.INSTANCE.register(this);"
-      : "    GooglePayLauncherHolder.register(this)";
+      const registerCall = isJava
+        ? "    GooglePayLauncherHolder.INSTANCE.register(this);"
+        : "    GooglePayLauncherHolder.register(this)";
 
-    contents = mergeContents({
-      src: contents,
-      comment: "    //",
-      tag: "expo-braintree-googlepay",
-      offset: 1,
-      anchor: /super\.onCreate\(.*\)/,
-      newSrc: registerCall,
-    }).contents;
+      contents = mergeContents({
+        src: contents,
+        comment: "    //",
+        tag: "expo-braintree-googlepay",
+        offset: 1,
+        anchor: /super\.onCreate\(.*\)/,
+        newSrc: registerCall,
+      }).contents;
 
-    mod.modResults.contents = contents;
+      mod.modResults.contents = contents;
+    } catch (error) {
+      // A customized MainActivity without a matching `super.onCreate(...)`
+      // line should not abort the entire prebuild — Google Pay just won't
+      // work until the call is added by hand.
+      console.warn(
+        "expo-braintree: could not inject GooglePayLauncherHolder.register(this) into " +
+          "MainActivity.onCreate() — add it manually or Google Pay results will not be " +
+          `delivered. (${error instanceof Error ? error.message : error})`
+      );
+    }
     return mod;
   });
 };

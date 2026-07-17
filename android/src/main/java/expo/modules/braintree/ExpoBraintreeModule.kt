@@ -62,6 +62,7 @@ class ExpoBraintreeModule : Module() {
   // lifecycle hook in this app.
   private var googlePayClient: GooglePayClient? = null
   private var googlePayPromise: Promise? = null
+  private var googlePayResultHandler: ((GooglePayPaymentAuthResult) -> Unit)? = null
 
   // PayPal state
   private val payPalLauncher = PayPalLauncher()
@@ -90,7 +91,17 @@ class ExpoBraintreeModule : Module() {
     // is a singleton (the launcher survives module re-creation), so re-point
     // it at whichever instance is current every time one is created.
     OnCreate {
-      GooglePayLauncherHolder.onResult = { result -> handleGooglePayReturn(result) }
+      val handler: (GooglePayPaymentAuthResult) -> Unit = { result -> handleGooglePayReturn(result) }
+      googlePayResultHandler = handler
+      GooglePayLauncherHolder.onResult = handler
+    }
+
+    OnDestroy {
+      // Only detach if the holder still points at this instance — a newer
+      // instance's OnCreate may already have re-pointed it.
+      if (GooglePayLauncherHolder.onResult === googlePayResultHandler) {
+        GooglePayLauncherHolder.onResult = null
+      }
     }
 
     // Handle PayPal/Venmo return from browser/app
@@ -173,12 +184,13 @@ class ExpoBraintreeModule : Module() {
       val client = googlePayClient ?: GooglePayClient(currentContext, auth)
       googlePayClient = client
 
-      val launcher = GooglePayLauncherHolder.launcher
-        ?: throw CodedException(
+      if (GooglePayLauncherHolder.launcher == null) {
+        throw CodedException(
           "GOOGLE_PAY_NOT_READY",
           "GooglePay launcher not initialized — MainActivity.onCreate() must call GooglePayLauncherHolder.register(this).",
           null
         )
+      }
 
       googlePayPromise = promise
 
@@ -202,7 +214,18 @@ class ExpoBraintreeModule : Module() {
       client.createPaymentAuthRequest(googlePayRequest) { paymentAuthRequest ->
         when (paymentAuthRequest) {
           is GooglePayPaymentAuthRequest.ReadyToLaunch -> {
-            launcher.launch(paymentAuthRequest)
+            // Re-read the launcher: the Activity may have been recreated while
+            // createPaymentAuthRequest was in flight, invalidating the one
+            // that existed at entry.
+            val launcher = GooglePayLauncherHolder.launcher
+            if (launcher != null) {
+              launcher.launch(paymentAuthRequest)
+            } else {
+              googlePayPromise?.reject(
+                CodedException("GOOGLE_PAY_NOT_READY", "GooglePay launcher was invalidated before launch (Activity recreated).", null)
+              )
+              googlePayPromise = null
+            }
           }
           is GooglePayPaymentAuthRequest.Failure -> {
             googlePayPromise?.reject(
