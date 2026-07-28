@@ -84,6 +84,16 @@ class ExpoBraintreeModule : Module() {
     get() = appContext.reactContext
       ?: throw BraintreeNotInitializedException()
 
+  // Deep-link fallback scheme for PayPal/Venmo browser-switch returns. Braintree
+  // Android SDK 5 resolves the return either via the App Link (the HTTPS URL from
+  // setReturnUrl) or, when that can't be used on the device — App Link not verified,
+  // or the default browser isn't App-Links-capable — via this custom scheme. Passing
+  // null here is what makes the SDK throw "deeplink fallback return url is null".
+  // The scheme mirrors what Braintree SDK 4 derived automatically and must match the
+  // intent filter the config plugin registers: "<applicationId>.braintree".
+  private val browserSwitchDeepLinkScheme: String
+    get() = currentContext.packageName + ".braintree"
+
   override fun definition() = ModuleDefinition {
     Name("ExpoBraintree")
 
@@ -104,16 +114,24 @@ class ExpoBraintreeModule : Module() {
       }
     }
 
-    // Handle PayPal/Venmo return from browser/app
+    // Handle PayPal/Venmo return from browser/app.
+    //
+    // A completed flow arrives as a browser-switch deep link via OnNewIntent.
+    // A user who dismisses the browser (Android back / closing the tab) sends no
+    // deep link at all — the app just resumes to the foreground with its old
+    // intent. So OnNewIntent must NOT treat a non-matching intent as a cancel
+    // (the real return may still be coming), but a foreground resume with no
+    // matching return means the user backed out — otherwise the JS promise
+    // hangs and the checkout CTA is stuck on "Processing…".
     OnNewIntent { intent ->
-      handlePayPalReturn(intent)
-      handleVenmoReturn(intent)
+      handlePayPalReturn(intent, fromForeground = false)
+      handleVenmoReturn(intent, fromForeground = false)
     }
 
     OnActivityEntersForeground {
       currentActivity.intent?.let { intent ->
-        handlePayPalReturn(intent)
-        handleVenmoReturn(intent)
+        handlePayPalReturn(intent, fromForeground = true)
+        handleVenmoReturn(intent, fromForeground = true)
       }
     }
 
@@ -244,7 +262,7 @@ class ExpoBraintreeModule : Module() {
       val returnUrl = appLinkReturnUrl
         ?: throw CodedException("PAYPAL_NOT_CONFIGURED", "Return URL not set. Call setReturnUrl() first.", null)
 
-      val client = PayPalClient(currentContext, auth, returnUrl)
+      val client = PayPalClient(currentContext, auth, returnUrl, browserSwitchDeepLinkScheme)
       payPalClient = client
       payPalPromise = promise
 
@@ -299,7 +317,7 @@ class ExpoBraintreeModule : Module() {
       val returnUrl = appLinkReturnUrl
         ?: throw CodedException("PAYPAL_NOT_CONFIGURED", "Return URL not set. Call setReturnUrl() first.", null)
 
-      val client = PayPalClient(currentContext, auth, returnUrl)
+      val client = PayPalClient(currentContext, auth, returnUrl, browserSwitchDeepLinkScheme)
       payPalClient = client
       payPalPromise = promise
 
@@ -345,7 +363,7 @@ class ExpoBraintreeModule : Module() {
       val returnUrl = appLinkReturnUrl
         ?: throw CodedException("VENMO_NOT_CONFIGURED", "Return URL not set. Call setReturnUrl() first.", null)
 
-      val client = VenmoClient(currentContext, auth, returnUrl)
+      val client = VenmoClient(currentContext, auth, returnUrl, browserSwitchDeepLinkScheme)
       venmoClient = client
       venmoPromise = promise
 
@@ -418,7 +436,7 @@ class ExpoBraintreeModule : Module() {
     }
   }
 
-  private fun handlePayPalReturn(intent: Intent) {
+  private fun handlePayPalReturn(intent: Intent, fromForeground: Boolean) {
     val pendingStr = payPalPendingRequestString ?: return
     val client = payPalClient ?: return
     val promise = payPalPromise ?: return
@@ -452,12 +470,21 @@ class ExpoBraintreeModule : Module() {
         promise.reject(CodedException("PAYPAL_ERROR", paymentAuthResult.error.message, paymentAuthResult.error))
       }
       is PayPalPaymentAuthResult.NoResult -> {
-        // User returned without completing flow, keep waiting
+        // No browser-switch result in this intent. From OnNewIntent this just
+        // means the intent isn't the PayPal return yet — keep waiting. From a
+        // foreground resume it means the user dismissed the PayPal browser
+        // without finishing, so settle as a cancellation so the JS promise (and
+        // the checkout CTA) doesn't hang.
+        if (fromForeground) {
+          payPalPendingRequestString = null
+          payPalPromise = null
+          promise.reject(CodedException("PAYPAL_CANCELLED", "User cancelled PayPal", null))
+        }
       }
     }
   }
 
-  private fun handleVenmoReturn(intent: Intent) {
+  private fun handleVenmoReturn(intent: Intent, fromForeground: Boolean) {
     val pendingStr = venmoPendingRequestString ?: return
     val client = venmoClient ?: return
     val promise = venmoPromise ?: return
@@ -499,7 +526,13 @@ class ExpoBraintreeModule : Module() {
         promise.reject(CodedException("VENMO_ERROR", paymentAuthResult.error.message, paymentAuthResult.error))
       }
       is VenmoPaymentAuthResult.NoResult -> {
-        // User returned without completing flow, keep waiting
+        // See handlePayPalReturn: only treat a foreground resume with no result
+        // as a user cancellation; OnNewIntent NoResult keeps waiting.
+        if (fromForeground) {
+          venmoPendingRequestString = null
+          venmoPromise = null
+          promise.reject(CodedException("VENMO_CANCELLED", "User cancelled Venmo", null))
+        }
       }
     }
   }
