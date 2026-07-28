@@ -45,6 +45,11 @@ const withBraintree: ConfigPlugin<BraintreePluginProps | void> = (
     enableGooglePay,
   });
 
+  // Android: deep-link fallback scheme for PayPal/Venmo browser-switch return
+  if (enablePayPal || enableVenmo) {
+    config = withBraintreePayPalReturnScheme(config);
+  }
+
   if (enableGooglePay) {
     config = withGooglePayMainActivity(config);
   }
@@ -125,6 +130,52 @@ const withGooglePayMainActivity: ConfigPlugin = (config) => {
           `delivered. (${error instanceof Error ? error.message : error})`
       );
     }
+    return mod;
+  });
+};
+
+// ── Android: PayPal/Venmo deep-link fallback return scheme ──────────────────
+
+// Braintree SDK 5 returns from the PayPal/Venmo browser switch via either an App
+// Link (the HTTPS setReturnUrl) or, when that isn't usable on the device, a custom
+// deep-link scheme. The native module passes "<applicationId>.braintree" as that
+// fallback (see ExpoBraintreeModule.browserSwitchDeepLinkScheme); this registers the
+// matching intent filter on MainActivity so Android routes the return back into the
+// app. Without it, PayPal fails with "deeplink fallback return url is null".
+const withBraintreePayPalReturnScheme: ConfigPlugin = (config) => {
+  return withAndroidManifest(config, (mod) => {
+    const manifest = mod.modResults.manifest;
+    const application = manifest.application?.[0];
+    const activities = application?.activity ?? [];
+    const mainActivity =
+      activities.find((a: any) => a.$?.["android:name"] === ".MainActivity") ??
+      activities.find((a: any) => a.$?.["android:name"]?.endsWith(".MainActivity")) ??
+      activities[0];
+
+    if (!mainActivity) {
+      return mod;
+    }
+
+    if (!mainActivity["intent-filter"]) {
+      mainActivity["intent-filter"] = [];
+    }
+
+    const scheme = "${applicationId}.braintree";
+    const already = mainActivity["intent-filter"].some((f: any) =>
+      f?.data?.some((d: any) => d?.$?.["android:scheme"] === scheme)
+    );
+
+    if (!already) {
+      mainActivity["intent-filter"].push({
+        action: [{ $: { "android:name": "android.intent.action.VIEW" } }],
+        category: [
+          { $: { "android:name": "android.intent.category.DEFAULT" } },
+          { $: { "android:name": "android.intent.category.BROWSABLE" } },
+        ],
+        data: [{ $: { "android:scheme": scheme } }],
+      });
+    }
+
     return mod;
   });
 };
