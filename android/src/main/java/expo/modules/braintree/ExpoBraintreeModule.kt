@@ -25,6 +25,7 @@ import com.braintreepayments.api.googlepay.GooglePayPaymentAuthRequest
 import com.braintreepayments.api.googlepay.GooglePayPaymentAuthResult
 import com.braintreepayments.api.googlepay.GooglePayReadinessResult
 import com.braintreepayments.api.googlepay.GooglePayTotalPriceStatus
+import com.braintreepayments.api.googlepay.GooglePayBillingAddressFormat
 
 // PayPal
 import com.braintreepayments.api.paypal.PayPalClient
@@ -222,6 +223,11 @@ class ExpoBraintreeModule : Module() {
         totalPrice = request.totalPrice,
         totalPriceStatus = totalPriceStatus,
         isBillingAddressRequired = request.billingAddressRequired ?: false,
+        billingAddressFormat = if (request.billingAddressFormat == "FULL") {
+          GooglePayBillingAddressFormat.FULL
+        } else {
+          GooglePayBillingAddressFormat.MIN
+        },
         isEmailRequired = request.emailRequired ?: false,
         isShippingAddressRequired = request.shippingAddressRequired ?: false,
         allowPrepaidCards = request.allowPrepaidCards ?: true,
@@ -589,6 +595,7 @@ class GooglePayRequestRecord : Record {
   @Field val totalPriceStatus: String? = "FINAL"
   @Field val allowPrepaidCards: Boolean? = true
   @Field val billingAddressRequired: Boolean? = false
+  @Field val billingAddressFormat: String? = null
   @Field val emailRequired: Boolean? = false
   @Field val shippingAddressRequired: Boolean? = false
 }
