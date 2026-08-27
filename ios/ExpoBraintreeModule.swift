@@ -83,6 +83,18 @@ public class ExpoBraintreeModule: Module {
         })
       }
 
+      if let billingFields = request.requiredBillingContactFields {
+        paymentRequest.requiredBillingContactFields = Set(billingFields.compactMap { field in
+          switch field {
+          case "postalAddress": return .postalAddress
+          case "name": return .name
+          case "emailAddress": return .emailAddress
+          case "phoneNumber": return .phoneNumber
+          default: return nil
+          }
+        })
+      }
+
       if let networks = request.supportedNetworks {
         paymentRequest.supportedNetworks = networks.compactMap { network in
           switch network {
@@ -253,6 +265,7 @@ struct ApplePayRequestData: Record {
   @Field var paymentSummaryItems: [ApplePaySummaryItemData]
   @Field var supportedNetworks: [String]?
   @Field var requiredShippingContactFields: [String]?
+  @Field var requiredBillingContactFields: [String]?
 }
 
 struct PayPalCheckoutRequestData: Record {
@@ -338,19 +351,16 @@ private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelega
         ]
 
         if let contact = payment.shippingContact {
-          if let postalAddress = contact.postalAddress {
-            result["shippingAddress"] = [
-              "recipientName": contact.name.map { PersonNameComponentsFormatter().string(from: $0) },
-              "streetAddress": postalAddress.street,
-              "extendedAddress": postalAddress.subLocality.isEmpty ? nil : postalAddress.subLocality,
-              "locality": postalAddress.city,
-              "region": postalAddress.state,
-              "postalCode": postalAddress.postalCode,
-              "countryCodeAlpha2": postalAddress.isoCountryCode,
-            ] as [String: Any?]
+          if let address = Self.serializeContactAddress(contact) {
+            result["shippingAddress"] = address
           }
           result["email"] = contact.emailAddress
           result["phoneNumber"] = contact.phoneNumber?.stringValue
+        }
+
+        if let contact = payment.billingContact,
+           let address = Self.serializeContactAddress(contact) {
+          result["billingAddress"] = address
         }
 
         continuation?.resume(returning: result)
@@ -361,6 +371,19 @@ private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelega
         continuation = nil
       }
     }
+  }
+
+  private static func serializeContactAddress(_ contact: PKContact) -> [String: Any?]? {
+    guard let postalAddress = contact.postalAddress else { return nil }
+    return [
+      "recipientName": contact.name.map { PersonNameComponentsFormatter().string(from: $0) },
+      "streetAddress": postalAddress.street,
+      "extendedAddress": postalAddress.subLocality.isEmpty ? nil : postalAddress.subLocality,
+      "locality": postalAddress.city,
+      "region": postalAddress.state,
+      "postalCode": postalAddress.postalCode,
+      "countryCodeAlpha2": postalAddress.isoCountryCode,
+    ]
   }
 
   func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {

@@ -15,6 +15,7 @@ export interface ApplePayRequest {
     paymentSummaryItems: ApplePaySummaryItem[];
     supportedNetworks?: ApplePayNetwork[];
     requiredShippingContactFields?: ApplePayContactField[];
+    requiredBillingContactFields?: ApplePayContactField[];
 }
 export interface ApplePaySummaryItem {
     label: string;
@@ -30,6 +31,7 @@ export interface GooglePayRequest {
     totalPriceStatus?: "FINAL" | "ESTIMATED" | "NOT_CURRENTLY_KNOWN";
     allowPrepaidCards?: boolean;
     billingAddressRequired?: boolean;
+    billingAddressFormat?: "MIN" | "FULL";
     emailRequired?: boolean;
     shippingAddressRequired?: boolean;
     googleMerchantId?: string;
@@ -74,6 +76,7 @@ export interface CardNonce extends PaymentMethodNonce {
 }
 export interface ApplePayNonce extends PaymentMethodNonce {
     type: "applePay";
+    billingAddress?: Address;
     shippingAddress?: Address;
     email?: string;
     phoneNumber?: string;
