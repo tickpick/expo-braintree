@@ -42,6 +42,7 @@ import {
   tokenizeVenmo,
   isApplePaySupported,
   isGooglePayReady,
+  collectDeviceData,
 } from "expo-braintree";
 
 // Initialize with a client token from your server
@@ -100,6 +101,10 @@ const venmoNonce = await tokenizeVenmo({
   collectCustomerShippingAddress: true,
 });
 // venmoNonce.shippingAddress
+
+// Device data for Braintree's fraud tools. Start it when checkout opens,
+// then send it to your server with the nonce as `device_data`.
+const deviceData = await collectDeviceData();
 ```
 
 ## Native SDK Versions
@@ -107,7 +112,7 @@ const venmoNonce = await tokenizeVenmo({
 | Platform | SDK | Version |
 |----------|-----|---------|
 | iOS | braintree_ios | ~> 7.3 |
-| Android | braintree-android | 5.22.0 |
+| Android | braintree-android | 5.24.0 |
 
 ## Requirements
 

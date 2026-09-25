@@ -27,6 +27,7 @@ exports.tokenizeGooglePay = tokenizeGooglePay;
 exports.tokenizePayPalCheckout = tokenizePayPalCheckout;
 exports.tokenizePayPalVault = tokenizePayPalVault;
 exports.tokenizeVenmo = tokenizeVenmo;
+exports.collectDeviceData = collectDeviceData;
 const react_native_1 = require("react-native");
 const ExpoBraintreeModule_1 = __importDefault(require("./ExpoBraintreeModule"));
 __exportStar(require("./ExpoBraintree.types"), exports);
@@ -79,4 +80,14 @@ async function tokenizePayPalVault(request) {
 // ── Venmo ───────────────────────────────────────────────────────────────────
 async function tokenizeVenmo(request) {
     return await ExpoBraintreeModule_1.default.tokenizeVenmo(request);
+}
+// ── Device Data (fraud) ─────────────────────────────────────────────────────
+/**
+ * Collect the `device_data` string for Braintree's fraud tools. Pass it to your
+ * server with the payment nonce (transaction sale / payment method create).
+ * Requires initialize() first. Collection can take a moment, so start it when
+ * the checkout screen opens rather than at submit.
+ */
+async function collectDeviceData(request = {}) {
+    return await ExpoBraintreeModule_1.default.collectDeviceData(request);
 }

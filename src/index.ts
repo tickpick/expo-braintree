@@ -12,6 +12,7 @@ import type {
   PayPalNonce,
   VenmoRequest,
   VenmoNonce,
+  DataCollectorRequest,
 } from "./ExpoBraintree.types";
 
 export * from "./ExpoBraintree.types";
@@ -90,4 +91,18 @@ export async function tokenizeVenmo(
   request: VenmoRequest
 ): Promise<VenmoNonce> {
   return await ExpoBraintreeModule.tokenizeVenmo(request);
+}
+
+// ── Device Data (fraud) ─────────────────────────────────────────────────────
+
+/**
+ * Collect the `device_data` string for Braintree's fraud tools. Pass it to your
+ * server with the payment nonce (transaction sale / payment method create).
+ * Requires initialize() first. Collection can take a moment, so start it when
+ * the checkout screen opens rather than at submit.
+ */
+export async function collectDeviceData(
+  request: DataCollectorRequest = {}
+): Promise<string> {
+  return await ExpoBraintreeModule.collectDeviceData(request);
 }
