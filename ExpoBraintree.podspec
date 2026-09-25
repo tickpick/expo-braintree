@@ -20,6 +20,7 @@ Pod::Spec.new do |s|
   s.dependency 'Braintree/ApplePay',  '~> 7.3'
   s.dependency 'Braintree/PayPal',    '~> 7.3'
   s.dependency 'Braintree/Venmo',     '~> 7.3'
+  s.dependency 'Braintree/DataCollector', '~> 7.3'
 
   s.source_files = 'ios/**/*.swift'
 end

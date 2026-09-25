@@ -1,4 +1,4 @@
-import type { CardData, CardNonce, ApplePayRequest, ApplePayNonce, GooglePayRequest, GooglePayNonce, PayPalCheckoutRequest, PayPalVaultRequest, PayPalNonce, VenmoRequest, VenmoNonce } from "./ExpoBraintree.types";
+import type { CardData, CardNonce, ApplePayRequest, ApplePayNonce, GooglePayRequest, GooglePayNonce, PayPalCheckoutRequest, PayPalVaultRequest, PayPalNonce, VenmoRequest, VenmoNonce, DataCollectorRequest } from "./ExpoBraintree.types";
 export * from "./ExpoBraintree.types";
 export declare function initialize(authorization: string): Promise<void>;
 /**
@@ -14,3 +14,10 @@ export declare function tokenizeGooglePay(request: GooglePayRequest): Promise<Go
 export declare function tokenizePayPalCheckout(request: PayPalCheckoutRequest): Promise<PayPalNonce>;
 export declare function tokenizePayPalVault(request: PayPalVaultRequest): Promise<PayPalNonce>;
 export declare function tokenizeVenmo(request: VenmoRequest): Promise<VenmoNonce>;
+/**
+ * Collect the `device_data` string for Braintree's fraud tools. Pass it to your
+ * server with the payment nonce (transaction sale / payment method create).
+ * Requires initialize() first. Collection can take a moment, so start it when
+ * the checkout screen opens rather than at submit.
+ */
+export declare function collectDeviceData(request?: DataCollectorRequest): Promise<string>;

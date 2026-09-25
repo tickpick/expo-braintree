@@ -112,3 +112,12 @@ export interface Address {
     postalCode?: string;
     countryCodeAlpha2?: string;
 }
+export interface DataCollectorRequest {
+    /**
+     * Android only. Whether the user consented to location collection; when
+     * true, PayPal's fraud SDK may include device location. Defaults to false.
+     * Only pass true if your app discloses and obtains consent for it, per
+     * Google Play's location policy. Ignored on iOS.
+     */
+    hasUserLocationConsent?: boolean;
+}

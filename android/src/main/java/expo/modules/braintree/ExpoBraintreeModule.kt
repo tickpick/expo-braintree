@@ -51,6 +51,11 @@ import com.braintreepayments.api.venmo.VenmoPaymentAuthRequest
 import com.braintreepayments.api.venmo.VenmoPaymentAuthResult
 import com.braintreepayments.api.venmo.VenmoPendingRequest
 
+// Data Collector
+import com.braintreepayments.api.datacollector.DataCollector
+import com.braintreepayments.api.datacollector.DataCollectorRequest
+import com.braintreepayments.api.datacollector.DataCollectorResult
+
 // Core
 import com.braintreepayments.api.core.PostalAddress
 
@@ -408,6 +413,25 @@ class ExpoBraintreeModule : Module() {
         }
       }
     }
+
+    // ── Device Data (fraud) ───────────────────────────────────────────────
+
+    // Collects the device_data string Braintree's fraud tools expect alongside
+    // a transaction or vault request. Send it to the server with the nonce.
+    AsyncFunction("collectDeviceData") { request: DataCollectorRequestRecord, promise: Promise ->
+      val auth = requireAuth()
+      val dataCollector = DataCollector(currentContext, auth)
+      val dataCollectorRequest = DataCollectorRequest(request.hasUserLocationConsent ?: false)
+
+      dataCollector.collectDeviceData(currentContext, dataCollectorRequest) { result ->
+        when (result) {
+          is DataCollectorResult.Success -> promise.resolve(result.deviceData)
+          is DataCollectorResult.Failure -> {
+            promise.reject(CodedException("DEVICE_DATA_ERROR", result.error.message, result.error))
+          }
+        }
+      }
+    }
   }
 
   // ── Return Handlers ──────────────────────────────────────────────────
@@ -624,6 +648,10 @@ class VenmoRequestRecord : Record {
   @Field val displayName: String? = null
   @Field val collectCustomerBillingAddress: Boolean? = false
   @Field val collectCustomerShippingAddress: Boolean? = false
+}
+
+class DataCollectorRequestRecord : Record {
+  @Field val hasUserLocationConsent: Boolean? = false
 }
 
 // ── Exceptions ────────────────────────────────────────────────────────────

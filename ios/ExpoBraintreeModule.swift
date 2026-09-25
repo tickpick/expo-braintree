@@ -201,6 +201,17 @@ public class ExpoBraintreeModule: Module {
         "shippingAddress": Self.serializePostalAddress(nonce.shippingAddress),
       ]
     }
+
+    // MARK: - Device Data (fraud)
+
+    // Collects the device_data string Braintree's fraud tools expect alongside
+    // a transaction or vault request. Send it to the server with the nonce.
+    // hasUserLocationConsent is an Android-only SDK input; iOS ignores it.
+    AsyncFunction("collectDeviceData") { (_: DataCollectorRequestData) -> String in
+      let auth = try self.requireAuthorization()
+      let dataCollector = BTDataCollector(authorization: auth)
+      return try await dataCollector.collectDeviceData()
+    }
   }
 
   // MARK: - Helpers
@@ -293,6 +304,10 @@ struct VenmoRequestData: Record {
   @Field var displayName: String?
   @Field var collectCustomerBillingAddress: Bool?
   @Field var collectCustomerShippingAddress: Bool?
+}
+
+struct DataCollectorRequestData: Record {
+  @Field var hasUserLocationConsent: Bool?
 }
 
 // MARK: - Errors
