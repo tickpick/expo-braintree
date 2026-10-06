@@ -139,6 +139,13 @@ export interface PayPalNonce extends PaymentMethodNonce {
 export interface VenmoNonce extends PaymentMethodNonce {
   type: "venmo";
   username?: string;
+  // Enriched customer data: only populated when the Braintree merchant
+  // account has it enabled and the Venmo user's profile has the value.
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  externalId?: string;
   billingAddress?: Address;
   shippingAddress?: Address;
 }

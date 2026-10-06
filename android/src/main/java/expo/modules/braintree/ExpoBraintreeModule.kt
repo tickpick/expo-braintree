@@ -537,6 +537,11 @@ class ExpoBraintreeModule : Module() {
                 "type" to "venmo",
                 "isDefault" to nonce.isDefault,
                 "username" to nonce.username,
+                "email" to nonce.email,
+                "firstName" to nonce.firstName,
+                "lastName" to nonce.lastName,
+                "phoneNumber" to nonce.phoneNumber,
+                "externalId" to nonce.externalId,
                 "billingAddress" to serializePostalAddress(nonce.billingAddress),
                 "shippingAddress" to serializePostalAddress(nonce.shippingAddress)
               ))

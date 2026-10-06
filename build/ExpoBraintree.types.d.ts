@@ -100,6 +100,11 @@ export interface PayPalNonce extends PaymentMethodNonce {
 export interface VenmoNonce extends PaymentMethodNonce {
     type: "venmo";
     username?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
+    externalId?: string;
     billingAddress?: Address;
     shippingAddress?: Address;
 }

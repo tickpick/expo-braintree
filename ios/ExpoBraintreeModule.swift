@@ -197,6 +197,11 @@ public class ExpoBraintreeModule: Module {
         "isDefault": nonce.isDefault,
         "description": nonce.description,
         "username": nonce.username,
+        "email": nonce.email,
+        "firstName": nonce.firstName,
+        "lastName": nonce.lastName,
+        "phoneNumber": nonce.phoneNumber,
+        "externalId": nonce.externalID,
         "billingAddress": Self.serializePostalAddress(nonce.billingAddress),
         "shippingAddress": Self.serializePostalAddress(nonce.shippingAddress),
       ]

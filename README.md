@@ -98,9 +98,13 @@ const paypalVaultNonce = await tokenizePayPalVault({
 const venmoNonce = await tokenizeVenmo({
   paymentMethodUsage: "multiUse",
   universalLink: "https://your-app.com/braintree-venmo",
+  collectCustomerBillingAddress: true,
   collectCustomerShippingAddress: true,
 });
-// venmoNonce.shippingAddress
+// venmoNonce.email, firstName, lastName, phoneNumber, billingAddress,
+// shippingAddress — enriched customer data, populated only when it is enabled
+// on the Braintree merchant account (requesting a billing address without it
+// fails tokenization).
 
 // Device data for Braintree's fraud tools. Start it when checkout opens,
 // then send it to your server with the nonce as `device_data`.
